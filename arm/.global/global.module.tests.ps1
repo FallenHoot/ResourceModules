@@ -1,22 +1,35 @@
 #Requires -Version 7
 
 param (
+    [Parameter(Mandatory = $false)]
     [array] $moduleFolderPaths = ((Get-ChildItem (Split-Path $PSScriptRoot -Parent) -Recurse -Directory -Force).FullName | Where-Object {
         (Get-ChildItem $_ -File -Depth 0 -Include @('deploy.json', 'deploy.bicep') -Force).Count -gt 0
-        })
+        }),
+
+    # Tokens to test for (i.e. their value should not be used in the parameter files, but their placeholder)
+    [Parameter(Mandatory = $false)]
+    [hashtable] $enforcedTokenList = @{}
 )
 
-$script:Settings = Get-Content -Path (Join-Path $PSScriptRoot '..\..\settings.json') | ConvertFrom-Json
+$script:RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$script:Settings = Get-Content -Path (Join-Path $PSScriptRoot '..\..\settings.json') | ConvertFrom-Json -AsHashtable
 $script:RGdeployment = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
 $script:Subscriptiondeployment = 'https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#'
 $script:MGdeployment = 'https://schema.management.azure.com/schemas/2019-08-01/managementGroupDeploymentTemplate.json#'
 $script:Tenantdeployment = 'https://schema.management.azure.com/schemas/2019-08-01/tenantDeploymentTemplate.json#'
 $script:moduleFolderPaths = $moduleFolderPaths
-$script:moduleFolderPathsFiltered = $moduleFolderPaths | Where-Object {
-    (Split-Path $_ -Leaf) -notin @( 'AzureNetappFiles', 'TrafficManager', 'PrivateDnsZones', 'ManagementGroups') }
+$script:enforcedTokenList = $enforcedTokenList
+
+# For runtime purposes, we cache the compiled template in a hashtable that uses a formatted relative module path as a key
+$script:convertedTemplates = @{}
+
+# Shared exception messages
+$script:bicepTemplateCompilationFailedException = "Unable to compile the deploy.bicep template's content. This can happen if there is an error in the template. Please check if you can run the command `az bicep build --file {0} --stdout | ConvertFrom-Json -AsHashtable`." # -f $templateFilePath
+$script:jsonTemplateLoadFailedException = "Unable to load the deploy.json template's content. This can happen if there is an error in the template. Please check if you can run the command `Get-Content {0} -Raw | ConvertFrom-Json -AsHashtable`." # -f $templateFilePath
+$script:templateNotFoundException = 'No template file found in folder [{0}]' # -f $moduleFolderPath
 
 # Import any helper function used in this test script
-Import-Module (Join-Path $PSScriptRoot 'shared\helper.psm1')
+Import-Module (Join-Path $PSScriptRoot 'shared\helper.psm1') -Force
 
 Describe 'File/folder tests' -Tag Modules {
 
@@ -27,10 +40,42 @@ Describe 'File/folder tests' -Tag Modules {
             $moduleFolderTestCases += @{
                 moduleFolderName = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
                 moduleFolderPath = $moduleFolderPath
+                isTopLevelModule = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1].Split('/').Count -eq 2 # <provider>/<resourceType>
+            }
+        }
+
+        if (Test-Path (Join-Path $repoRoot '.github')) {
+            It '[<moduleFolderName>] Module should have a GitHub workflow' -TestCases ($moduleFolderTestCases | Where-Object { $_.isTopLevelModule }) {
+
+                param(
+                    [string] $moduleFolderName,
+                    [string] $moduleFolderPath
+                )
+
+                $workflowsFolderName = Join-Path $RepoRoot '.github' 'workflows'
+                $workflowFileName = '{0}.yml' -f $moduleFolderName.Replace('\', '/').Replace('/', '.').Replace('Microsoft', 'ms').ToLower()
+                $workflowPath = Join-Path $workflowsFolderName $workflowFileName
+                Test-Path $workflowPath | Should -Be $true -Because "path [$workflowPath] should exist."
+            }
+        }
+
+        if (Test-Path (Join-Path $repoRoot '.azuredevops')) {
+            It '[<moduleFolderName>] Module should have an Azure DevOps pipeline' -TestCases ($moduleFolderTestCases | Where-Object { $_.isTopLevelModule }) {
+
+                param(
+                    [string] $moduleFolderName,
+                    [string] $moduleFolderPath
+                )
+
+                $pipelinesFolderName = Join-Path $RepoRoot '.azuredevops' 'modulePipelines'
+                $pipelineFileName = '{0}.yml' -f $moduleFolderName.Replace('\', '/').Replace('/', '.').Replace('Microsoft', 'ms').ToLower()
+                $pipelinePath = Join-Path $pipelinesFolderName $pipelineFileName
+                Test-Path $pipelinePath | Should -Be $true -Because "path [$pipelinePath] should exist."
             }
         }
 
         It '[<moduleFolderName>] Module should contain a [deploy.json/deploy.bicep] file' -TestCases $moduleFolderTestCases {
+
             param( [string] $moduleFolderPath )
 
             $hasARM = (Test-Path (Join-Path -Path $moduleFolderPath 'deploy.json'))
@@ -39,20 +84,19 @@ Describe 'File/folder tests' -Tag Modules {
         }
 
         It '[<moduleFolderName>] Module should contain a [readme.md] file' -TestCases $moduleFolderTestCases {
+
             param( [string] $moduleFolderPath )
             (Test-Path (Join-Path -Path $moduleFolderPath 'readme.md')) | Should -Be $true
         }
 
-        It '[<moduleFolderName>] Module should contain a [.parameters] folder' -TestCases $moduleFolderTestCases {
+        It '[<moduleFolderName>] Module should contain a [.parameters] folder' -TestCases ($moduleFolderTestCases | Where-Object { $_.isTopLevelModule }) {
+
             param( [string] $moduleFolderPath )
-            if ((Split-Path (Split-Path $moduleFolderPath -Parent) -Leaf) -like 'Microsoft.*') {
-                (Test-Path (Join-Path -Path $moduleFolderPath '.parameters')) | Should -Be $true
-            } else {
-                $true | Should -Be $true
-            }
+            Test-Path (Join-Path -Path $moduleFolderPath '.parameters') | Should -Be $true
         }
 
         It '[<moduleFolderName>] Module should contain a [version.json] file' -TestCases $moduleFolderTestCases {
+
             param( [string] $moduleFolderPath )
             (Test-Path (Join-Path -Path $moduleFolderPath 'version.json')) | Should -Be $true
         }
@@ -62,7 +106,7 @@ Describe 'File/folder tests' -Tag Modules {
 
         $folderTestCases = [System.Collections.ArrayList]@()
         foreach ($moduleFolderPath in $moduleFolderPaths) {
-            if (Test-Path (Join-Path $moduleFolderPath '.paramateres')) {
+            if (Test-Path (Join-Path $moduleFolderPath '.parameters')) {
                 $folderTestCases += @{
                     moduleFolderName = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
                     moduleFolderPath = $moduleFolderPath
@@ -71,8 +115,9 @@ Describe 'File/folder tests' -Tag Modules {
         }
 
         It '[<moduleFolderName>] folder should contain one or more *parameters.json files' -TestCases $folderTestCases {
+
             param(
-                $moduleFolderName,
+                [string] $moduleFolderName,
                 $moduleFolderPath
             )
             $parameterFolderPath = Join-Path $moduleFolderPath '.parameters'
@@ -93,8 +138,9 @@ Describe 'File/folder tests' -Tag Modules {
         }
 
         It '[<moduleFolderName>] *parameters.json files in the .parameters folder should be valid json' -TestCases $parameterFolderFilesTestCases {
+
             param(
-                $moduleFolderName,
+                [string] $moduleFolderName,
                 $parameterFilePath
             )
             (Get-Content $parameterFilePath) | ConvertFrom-Json
@@ -109,82 +155,98 @@ Describe 'Readme tests' -Tag Readme {
         $readmeFolderTestCases = [System.Collections.ArrayList] @()
         foreach ($moduleFolderPath in $moduleFolderPaths) {
 
-            if (Test-Path (Join-Path $moduleFolderPath 'deploy.bicep')) {
-                $templateContent = az bicep build --file (Join-Path $moduleFolderPath 'deploy.bicep') --stdout | ConvertFrom-Json -AsHashtable
-            } elseif (Test-Path (Join-Path $moduleFolderPath 'deploy.json')) {
-                $templateContent = Get-Content (Join-Path $moduleFolderPath 'deploy.json') -Raw | ConvertFrom-Json -AsHashtable
+            # For runtime purposes, we cache the compiled template in a hashtable that uses a formatted relative module path as a key
+            $moduleFolderPathKey = $moduleFolderPath.Split('arm')[1].Replace('\', '/').Trim('/').Replace('/', '-')
+            if (-not ($convertedTemplates.Keys -contains $moduleFolderPathKey)) {
+                if (Test-Path (Join-Path $moduleFolderPath 'deploy.bicep')) {
+                    $templateFilePath = Join-Path $moduleFolderPath 'deploy.bicep'
+                    $templateContent = az bicep build --file $templateFilePath --stdout --no-restore | ConvertFrom-Json -AsHashtable
+
+                    if (-not $templateContent) {
+                        throw ($bicepTemplateCompilationFailedException -f $templateFilePath)
+                    }
+                } elseIf (Test-Path (Join-Path $moduleFolderPath 'deploy.json')) {
+                    $templateFilePath = Join-Path $moduleFolderPath 'deploy.json'
+                    $templateContent = Get-Content $templateFilePath -Raw | ConvertFrom-Json -AsHashtable
+
+                    if (-not $templateContent) {
+                        throw ($jsonTemplateLoadFailedException -f $templateFilePath)
+                    }
+                } else {
+                    throw ($templateNotFoundException -f $moduleFolderPath)
+                }
+                $convertedTemplates[$moduleFolderPathKey] = @{
+                    templateFilePath = $templateFilePath
+                    templateContent  = $templateContent
+                }
             } else {
-                throw "No template file found in folder [$moduleFolderPath]"
+                $templateContent = $convertedTemplates[$moduleFolderPathKey].templateContent
+                $templateFilePath = $convertedTemplates[$moduleFolderPathKey].templateFilePath
             }
 
             $readmeFolderTestCases += @{
                 moduleFolderName = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
                 moduleFolderPath = $moduleFolderPath
                 templateContent  = $templateContent
+                templateFilePath = $templateFilePath
+                readMeFilePath   = Join-Path -Path $moduleFolderPath 'readme.md'
                 readMeContent    = Get-Content (Join-Path -Path $moduleFolderPath 'readme.md')
+                isTopLevelModule = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1].Split('/').Count -eq 2 # <provider>/<resourceType>
             }
         }
 
         It '[<moduleFolderName>] Readme.md file should not be empty' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $readMeContent
+                [string] $moduleFolderName,
+                [object[]] $readMeContent
             )
             $readMeContent | Should -Not -Be $null
         }
 
-        It '[<moduleFolderName>] Readme.md file should contain the these titles in order: Resource Types, Parameters, Outputs, Template references' -TestCases $readmeFolderTestCases {
+        It '[<moduleFolderName>] Readme.md file should contain these sections in order: Navigation, Resource Types, Parameters, Outputs, Deployment examples' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $readMeContent
+                [string] $moduleFolderName,
+                [object[]] $readMeContent,
+                [boolean] $isTopLevelModule
             )
 
-            $ReadmeHTML = ($readMeContent | ConvertFrom-Markdown -ErrorAction SilentlyContinue).Html
+            $expectedHeadersInOrder = @('Navigation', 'Resource types', 'Parameters', 'Outputs')
 
-            $Heading2Order = @('Resource Types', 'parameters', 'Outputs', 'Template references')
-            $Headings2List = @()
-            foreach ($H in $ReadmeHTML) {
-                if ($H.Contains('<h2')) {
-                    $StartingIndex = $H.IndexOf('>') + 1
-                    $EndIndex = $H.LastIndexof('<')
-                    $headings2List += ($H.Substring($StartingIndex, $EndIndex - $StartingIndex))
-                }
+            if ($isTopLevelModule) {
+                # Only top-level modules have parameter files and hence deployment examples
+                $expectedHeadersInOrder += 'Deployment examples'
             }
 
-            $differentiatingItems = $Heading2Order | Where-Object { $Headings2List -notcontains $_ }
-            $differentiatingItems.Count | Should -Be 0 -Because ('list of heading titles missing in the ReadMe file [{0}] should be empty' -f ($differentiatingItems -join ','))
+            $actualHeadersInOrder = $readMeContent | Where-Object { $_ -like '#*' } | ForEach-Object { ($_ -replace '#', '').TrimStart() }
+
+            $filteredActuals = $actualHeadersInOrder | Where-Object { $expectedHeadersInOrder -contains $_ }
+
+            $missingHeaders = $expectedHeadersInOrder | Where-Object { $actualHeadersInOrder -notcontains $_ }
+            $missingHeaders.Count | Should -Be 0 -Because ('the list of missing headers [{0}] should be empty' -f ($missingHeaders -join ','))
+
+            $filteredActuals | Should -Be $expectedHeadersInOrder -Because 'the headers should exist in the expected order'
         }
 
         It '[<moduleFolderName>] Resources section should contain all resources from the template file' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent,
-                $readMeContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [object[]] $readMeContent
             )
 
             # Get ReadMe data
-            $resourcesSectionStartIndex = 0
-            while ($readMeContent[$resourcesSectionStartIndex] -notlike '*# Resource Types' -and -not ($resourcesSectionStartIndex -ge $readMeContent.count)) {
-                $resourcesSectionStartIndex++
-            }
-
-            $resourcesTableStartIndex = $resourcesSectionStartIndex + 1
-            while ($readMeContent[$resourcesTableStartIndex] -notlike '*|*' -and -not ($resourcesTableStartIndex -ge $readMeContent.count)) {
-                $resourcesTableStartIndex++
-            }
-
-            $resourcesTableEndIndex = $resourcesTableStartIndex + 2
-            while ($readMeContent[$resourcesTableEndIndex] -like '|*' -and -not ($resourcesTableEndIndex -ge $readMeContent.count)) {
-                $resourcesTableEndIndex++
-            }
+            $tableStartIndex, $tableEndIndex = Get-TableStartAndEndIndex -ReadMeContent $readMeContent -MarkdownSectionIdentifier '*# Resource Types'
 
             $ReadMeResourcesList = [System.Collections.ArrayList]@()
-            for ($index = $resourcesTableStartIndex + 2; $index -lt $resourcesTableEndIndex; $index++) {
+            for ($index = $tableStartIndex + 2; $index -lt $tableEndIndex; $index++) {
                 $ReadMeResourcesList += $readMeContent[$index].Split('|')[1].Replace('`', '').Trim()
             }
 
             # Get template data
-            $templateResources = (Get-NestedResourceList -TemplateContent $templateContent | Where-Object {
+            $templateResources = (Get-NestedResourceList -TemplateFileContent $templateContent | Where-Object {
                     $_.type -notin @('Microsoft.Resources/deployments') -and $_ }).type | Select-Object -Unique
 
             # Compare
@@ -192,36 +254,24 @@ Describe 'Readme tests' -Tag Readme {
             $differentiatingItems.Count | Should -Be 0 -Because ("list of template resources missing from the ReadMe's list [{0}] should be empty" -f ($differentiatingItems -join ','))
         }
 
-        It '[<moduleFolderName>] Resources section should not contain more resources as in the template file' -TestCases $readmeFolderTestCases {
+        It '[<moduleFolderName>] Resources section should not contain more resources than the template file' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent,
-                $readMeContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [object[]] $readMeContent
             )
 
             # Get ReadMe data
-            $resourcesSectionStartIndex = 0
-            while ($readMeContent[$resourcesSectionStartIndex] -notlike '*# Resource Types' -and -not ($resourcesSectionStartIndex -ge $readMeContent.count)) {
-                $resourcesSectionStartIndex++
-            }
-
-            $resourcesTableStartIndex = $resourcesSectionStartIndex + 1
-            while ($readMeContent[$resourcesTableStartIndex] -notlike '*|*' -and -not ($resourcesTableStartIndex -ge $readMeContent.count)) {
-                $resourcesTableStartIndex++
-            }
-
-            $resourcesTableEndIndex = $resourcesTableStartIndex + 2
-            while ($readMeContent[$resourcesTableEndIndex] -like '|*' -and -not ($resourcesTableEndIndex -ge $readMeContent.count)) {
-                $resourcesTableEndIndex++
-            }
+            $tableStartIndex, $tableEndIndex = Get-TableStartAndEndIndex -ReadMeContent $readMeContent -MarkdownSectionIdentifier '*# Resource Types'
 
             $ReadMeResourcesList = [System.Collections.ArrayList]@()
-            for ($index = $resourcesTableStartIndex + 2; $index -lt $resourcesTableEndIndex; $index++) {
+            for ($index = $tableStartIndex + 2; $index -lt $tableEndIndex; $index++) {
                 $ReadMeResourcesList += $readMeContent[$index].Split('|')[1].Replace('`', '').Trim()
             }
 
             # Get template data
-            $templateResources = (Get-NestedResourceList -TemplateContent $templateContent | Where-Object {
+            $templateResources = (Get-NestedResourceList -TemplateFileContent $templateContent | Where-Object {
                     $_.type -notin @('Microsoft.Resources/deployments') -and $_ }).type | Select-Object -Unique
 
             # Compare
@@ -229,69 +279,107 @@ Describe 'Readme tests' -Tag Readme {
             $differentiatingItems.Count | Should -Be 0 -Because ("list of resources in the ReadMe's list [{0}] not in the template file should be empty" -f ($differentiatingItems -join ','))
         }
 
-        It '[<moduleFolderName>] parameters section should contain a table with these column names in order: Parameter Name, Type, Default Value, Possible values, Description' -TestCases $readmeFolderTestCases {
+        It '[<moduleFolderName>] Parameters section should contain a table for each existing parameter category in the following order: Required, Conditional, Optional, Generated' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $readMeContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [object[]] $readMeContent
             )
 
-            $ReadmeHTML = ($readMeContent | ConvertFrom-Markdown -ErrorAction SilentlyContinue).Html
-            $ParameterHeadingOrder = @('Parameter Name', 'Type', 'Default Value', 'Allowed Values', 'Description')
-            $ComparisonFlag = 0
-            $Headings = @(@())
-            foreach ($H in $ReadmeHTML) {
-                if ($H.Contains('<h')) {
-                    $StartingIndex = $H.IndexOf('>') + 1
-                    $EndIndex = $H.LastIndexof('<')
-                    $Headings += , (@($H.Substring($StartingIndex, $EndIndex - $StartingIndex), $ReadmeHTML.IndexOf($H)))
-                }
-            }
-            $HeadingIndex = $Headings | Where-Object { $_ -eq 'parameters' }
-            if ($HeadingIndex -eq $null) {
-                Write-Verbose "[parameters section should contain a table with these column names in order: Parameter Name, Type, Default Value, Possible values, Description] Error At ($moduleFolderName)" -Verbose
-                $true | Should -Be $false
-            }
-            $ParameterHeadingsList = $ReadmeHTML[$HeadingIndex[1] + 2].Replace('<p>|', '').Replace('|</p>', '').Split('|').Trim()
-            if (Compare-Object -ReferenceObject $ParameterHeadingOrder -DifferenceObject $ParameterHeadingsList -SyncWindow 0) {
-                $ComparisonFlag = $ComparisonFlag + 1
-            }
-            ($ComparisonFlag -gt 2) | Should -Be $false
+            $expectColumnsInOrder = @('Required', 'Conditional', 'Optional', 'Generated')
+
+            ## Get all descriptions
+            $descriptions = $templateContent.parameters.Values.metadata.description
+
+            ## Get the module parameter categories
+            $expectedParamCategories = $descriptions | ForEach-Object { $_.Split('.')[0] } | Select-Object -Unique # Get categories in template
+            $expectedParamCategoriesInOrder = $expectColumnsInOrder | Where-Object { $_ -in $expectedParamCategories } # add required ones in order
+            $expectedParamCategoriesInOrder += $expectedParamCategories | Where-Object { $_ -notin $expectColumnsInOrder } # add non-required ones after
+
+            $actualParamCategories = $readMeContent | Select-String -Pattern '^\*\*(.+) parameters\*\*$' -AllMatches | ForEach-Object { $_.Matches.Groups[1].Value } # get actual in readme
+
+            $actualParamCategories | Should -Be $expectedParamCategoriesInOrder
         }
 
-        It '[<moduleFolderName>] parameters section should contain all parameters from the template file' -TestCases $readmeFolderTestCases {
+        It '[<moduleFolderName>] parameter tables should provide columns in the following order: Parameter Name, Type, Default Value, Allowed Values, Description. Each column should be present unless empty for all the rows.' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent,
-                $readMeContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [object[]] $readMeContent
+            )
+
+            ## Get all descriptions
+            $descriptions = $templateContent.parameters.Values.metadata.description
+
+            ## Get the module parameter categories
+            $paramCategories = $descriptions | ForEach-Object { $_.Split('.')[0] } | Select-Object -Unique
+
+            foreach ($paramCategory in $paramCategories) {
+
+                # Filter to relevant items
+                [array] $categoryParameters = $templateContent.parameters.Values | Where-Object { $_.metadata.description -like "$paramCategory. *" } | Sort-Object -Property 'Name' -Culture 'en-US'
+
+                # Check properties for later reference
+                $shouldHaveDefault = $categoryParameters.defaultValue.count -gt 0
+                $shouldHaveAllowed = $categoryParameters.allowedValues.count -gt 0
+
+                $expectedColumnsInOrder = @('Parameter Name', 'Type')
+                if ($shouldHaveDefault) { $expectedColumnsInOrder += @('Default Value') }
+                if ($shouldHaveAllowed) { $expectedColumnsInOrder += @('Allowed Values') }
+                $expectedColumnsInOrder += @('Description')
+
+                $readMeCategoryIndex = $readMeContent | Select-String -Pattern "^\*\*$paramCategory parameters\*\*$" | ForEach-Object { $_.LineNumber }
+                $readmeCategoryColumns = ($readMeContent[$readMeCategoryIndex] -split '\|') | ForEach-Object { $_.Trim() } | Where-Object { -not [String]::IsNullOrEmpty($_) }
+
+                $readmeCategoryColumns | Should -Be $expectedColumnsInOrder
+            }
+        }
+
+        It '[<moduleFolderName>] Parameters section should contain all parameters from the template file' -TestCases $readmeFolderTestCases {
+
+            param(
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [object[]] $readMeContent
             )
 
             # Get Template data
             $parameters = $templateContent.parameters.Keys
 
             # Get ReadMe data
-            $parametersSectionStartIndex = 0
-            while ($readMeContent[$parametersSectionStartIndex] -notlike '*# Parameters' -and -not ($parametersSectionStartIndex -ge $readMeContent.count)) {
-                $parametersSectionStartIndex++
-            }
+            ## Get section start index
+            $sectionStartIndex = Get-MarkdownSectionStartIndex -ReadMeContent $readMeContent -MarkdownSectionIdentifier '*# Parameters'
 
-            $parametersTableStartIndex = $parametersSectionStartIndex + 1
-            while ($readMeContent[$parametersTableStartIndex] -notlike '*|*' -and -not ($parametersTableStartIndex -ge $readMeContent.count)) {
-                $parametersTableStartIndex++
-            }
-
-            if ($parametersSectionStartIndex -ge $readMeContent.count) {
+            if ($sectionStartIndex -ge $readMeContent.count) {
                 throw 'Parameters section is missing in the Readme. Please add and re-run the tests.'
             }
 
-            $parametersTableEndIndex = $parametersTableStartIndex + 2 # Header row + table separator row
-            while ($readMeContent[$parametersTableEndIndex] -like '*|*' -and -not ($parametersTableEndIndex -ge $readMeContent.count)) {
-                $parametersTableEndIndex++
-            }
-            $parametersTableEndIndex-- # remove one index as the while loop will move one index past the last table row
+            $parametersSectionEndIndex = Get-MarkdownSectionEndIndex -ReadMeContent $readMeContent -SectionStartIndex $sectionStartIndex
 
+            ## Iterate over all parameter tables
             $parametersList = [System.Collections.ArrayList]@()
-            for ($index = $parametersTableStartIndex + 2; $index -le $parametersTableEndIndex; $index++) {
-                $parametersList += $readMeContent[$index].Split('|')[1].Replace('`', '').Trim()
+            $sectionIndex = $sectionStartIndex
+            while ($sectionIndex -lt $parametersSectionEndIndex) {
+                ### Get table start index
+                $parametersTableStartIndex = $sectionIndex
+                while ($readMeContent[$parametersTableStartIndex] -notlike '*|*' -and -not ($parametersTableStartIndex -ge $readMeContent.count)) {
+                    $parametersTableStartIndex++
+                }
+                Write-Verbose ("[loop] Start row of the parameter table: $parametersTableStartIndex")
+
+                ### Get table end index
+                $parametersTableEndIndex = $parametersTableStartIndex + 2 # Header row + table separator row
+                while ($readMeContent[$parametersTableEndIndex] -like '*|*' -and -not ($parametersTableEndIndex -ge $readMeContent.count)) {
+                    $parametersTableEndIndex++
+                }
+                Write-Verbose ("[loop] End row of the parameter table: $parametersTableEndIndex")
+
+                for ($tableIndex = $parametersTableStartIndex + 2; $tableIndex -lt $parametersTableEndIndex; $tableIndex++) {
+                    $parametersList += $readMeContent[$tableIndex].Split('|')[1].Replace('`', '').Trim()
+                }
+                $sectionIndex = $parametersTableEndIndex + 1
             }
 
             # Test
@@ -300,23 +388,15 @@ Describe 'Readme tests' -Tag Readme {
         }
 
         It '[<moduleFolderName>] Outputs section should contain a table with these column names in order: Output Name, Type' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
+                [string] $moduleFolderName,
                 $readMeContent
             )
 
-            # Get ReadMe data
-            $outputsSectionStartIndex = 0
-            while ($readMeContent[$outputsSectionStartIndex] -notlike '*# Outputs' -and -not ($outputsSectionStartIndex -ge $readMeContent.count)) {
-                $outputsSectionStartIndex++
-            }
+            $tableStartIndex, $tableEndIndex = Get-TableStartAndEndIndex -ReadMeContent $readMeContent -MarkdownSectionIdentifier '*# Outputs'
 
-            $outputsTableStartIndex = $outputsSectionStartIndex + 1
-            while ($readMeContent[$outputsTableStartIndex] -notlike '*|*' -and -not ($outputsTableStartIndex -ge $readMeContent.count)) {
-                $outputsTableStartIndex++
-            }
-
-            $outputsTableHeader = $readMeContent[$outputsTableStartIndex].Split('|').Trim() | Where-Object { -not [String]::IsNullOrEmpty($_) }
+            $outputsTableHeader = $readMeContent[$tableStartIndex].Split('|').Trim() | Where-Object { -not [String]::IsNullOrEmpty($_) }
 
             # Test
             $expectedOutputsTableOrder = @('Output Name', 'Type')
@@ -325,69 +405,61 @@ Describe 'Readme tests' -Tag Readme {
         }
 
         It '[<moduleFolderName>] Output section should contain all outputs defined in the template file' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent,
-                $readMeContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [object[]] $readMeContent
             )
 
             # Get ReadMe data
-            $outputsSectionStartIndex = 0
-            while ($readMeContent[$outputsSectionStartIndex] -notlike '*# Outputs' -and -not ($outputsSectionStartIndex -ge $readMeContent.count)) {
-                $outputsSectionStartIndex++
-            }
+            $tableStartIndex, $tableEndIndex = Get-TableStartAndEndIndex -ReadMeContent $readMeContent -MarkdownSectionIdentifier '*# Outputs'
 
-            $outputsTableStartIndex = $outputsSectionStartIndex + 1
-            while ($readMeContent[$outputsTableStartIndex] -notlike '*|*' -and -not ($outputsTableStartIndex -ge $readMeContent.count)) {
-                $outputsTableStartIndex++
-            }
-
-            $outputsTableEndIndex = $outputsTableStartIndex + 2
-            while ($readMeContent[$outputsTableEndIndex] -like '|*' -and -not ($outputsTableEndIndex -ge $readMeContent.count)) {
-                $outputsTableEndIndex++
-            }
-
-            $ReadMeoutputsList = [System.Collections.ArrayList]@()
-            for ($index = $outputsTableStartIndex + 2; $index -lt $outputsTableEndIndex; $index++) {
-                $ReadMeoutputsList += $readMeContent[$index].Split('|')[1].Replace('`', '').Trim()
+            $ReadMeOutputsList = [System.Collections.ArrayList]@()
+            for ($index = $tableStartIndex + 2; $index -lt $tableEndIndex; $index++) {
+                $ReadMeOutputsList += $readMeContent[$index].Split('|')[1].Replace('`', '').Trim()
             }
 
             # Template data
             $expectedOutputs = $templateContent.outputs.Keys
 
             # Test
-            $differentiatingItems = $expectedOutputs | Where-Object { $ReadMeoutputsList -notcontains $_ }
+            $differentiatingItems = $expectedOutputs | Where-Object { $ReadMeOutputsList -notcontains $_ }
             $differentiatingItems.Count | Should -Be 0 -Because ('list of template outputs missing in the ReadMe file [{0}] should be empty' -f ($differentiatingItems -join ','))
 
-            $differentiatingItems = $ReadMeoutputsList | Where-Object { $expectedOutputs -notcontains $_ }
+            $differentiatingItems = $ReadMeOutputsList | Where-Object { $expectedOutputs -notcontains $_ }
             $differentiatingItems.Count | Should -Be 0 -Because ('list of excess template outputs defined in the ReadMe file [{0}] should be empty' -f ($differentiatingItems -join ','))
         }
 
-        It '[<moduleFolderName>] Template References section should contain at least one bullet point with a reference' -TestCases $readmeFolderTestCases {
+        It '[<moduleFolderName>] Set-ModuleReadMe script should not apply any updates' -TestCases $readmeFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $readMeContent
+                [string] $moduleFolderName,
+                [string] $templateFilePath,
+                [hashtable] $templateContent,
+                [string] $readMeFilePath
             )
 
-            $ReadmeHTML = ($readMeContent | ConvertFrom-Markdown -ErrorAction SilentlyContinue).Html
-            $Headings = @(@())
-            foreach ($H in $ReadmeHTML) {
-                if ($H.Contains('<h')) {
-                    $StartingIndex = $H.IndexOf('>') + 1
-                    $EndIndex = $H.LastIndexof('<')
-                    $Headings += , (@($H.Substring($StartingIndex, $EndIndex - $StartingIndex), $ReadmeHTML.IndexOf($H)))
-                }
-            }
-            $HeadingIndex = $Headings | Where-Object { $_ -eq 'Template References' }
-            if ($HeadingIndex -eq $null) {
-                Write-Verbose "[Template References should contain at least one bullet point with a reference] Error At ($moduleFolderName)" -Verbose
-                $true | Should -Be $false
-            }
-            $StartIndex = $HeadingIndex[1] + 2
-            ($ReadmeHTML[$StartIndex].Contains('<li>')) | Should -Be $true
-            ($ReadmeHTML[$StartIndex].Contains('href')) | Should -Be $true
-        }
+            # Get current hash
+            $fileHashBefore = (Get-FileHash $readMeFilePath).Hash
 
+            # Load function
+            . (Join-Path $repoRoot 'utilities' 'tools' 'Set-ModuleReadMe.ps1')
+
+            # Apply update with already compiled template content
+            Set-ModuleReadMe -TemplateFilePath $templateFilePath -TemplateFileContent $templateContent
+
+            # Get hash after 'update'
+            $fileHashAfter = (Get-FileHash $readMeFilePath).Hash
+
+            # Compare
+            $filesAreTheSame = $fileHashBefore -eq $fileHashAfter
+            if (-not $filesAreTheSame) {
+                $diffReponse = git diff
+                Write-Warning ($diffReponse | Out-String) -Verbose
+            }
+            $filesAreTheSame | Should -Be $true -Because 'The file hashes before and after applying the Set-ModuleReadMe function should be identical'
+        }
     }
 }
 
@@ -396,15 +468,35 @@ Describe 'Deployment template tests' -Tag Template {
     Context 'Deployment template tests' {
 
         $deploymentFolderTestCases = [System.Collections.ArrayList] @()
-        $deploymentFolderTestCasesException = [System.Collections.ArrayList] @()
         foreach ($moduleFolderPath in $moduleFolderPaths) {
 
-            if (Test-Path (Join-Path $moduleFolderPath 'deploy.bicep')) {
-                $templateContent = az bicep build --file (Join-Path $moduleFolderPath 'deploy.bicep') --stdout | ConvertFrom-Json -AsHashtable
-            } elseif (Test-Path (Join-Path $moduleFolderPath 'deploy.json')) {
-                $templateContent = Get-Content (Join-Path $moduleFolderPath 'deploy.json') -Raw | ConvertFrom-Json -AsHashtable
+            # For runtime purposes, we cache the compiled template in a hashtable that uses a formatted relative module path as a key
+            $moduleFolderPathKey = $moduleFolderPath.Split('arm')[1].Replace('\', '/').Trim('/').Replace('/', '-')
+            if (-not ($convertedTemplates.Keys -contains $moduleFolderPathKey)) {
+                if (Test-Path (Join-Path $moduleFolderPath 'deploy.bicep')) {
+                    $templateFilePath = Join-Path $moduleFolderPath 'deploy.bicep'
+                    $templateContent = az bicep build --file $templateFilePath --stdout --no-restore | ConvertFrom-Json -AsHashtable
+
+                    if (-not $templateContent) {
+                        throw ($bicepTemplateCompilationFailedException -f $templateFilePath)
+                    }
+                } elseIf (Test-Path (Join-Path $moduleFolderPath 'deploy.json')) {
+                    $templateFilePath = Join-Path $moduleFolderPath 'deploy.json'
+                    $templateContent = Get-Content $templateFilePath -Raw | ConvertFrom-Json -AsHashtable
+
+                    if (-not $templateContent) {
+                        throw ($jsonTemplateLoadFailedException -f $templateFilePath)
+                    }
+                } else {
+                    throw ($templateNotFoundException -f $moduleFolderPath)
+                }
+                $convertedTemplates[$moduleFolderPathKey] = @{
+                    templateFilePath = $templateFilePath
+                    templateContent  = $templateContent
+                }
             } else {
-                throw "No template file found in folder [$moduleFolderPath]"
+                $templateContent = $convertedTemplates[$moduleFolderPathKey].templateContent
+                $templateFilePath = $convertedTemplates[$moduleFolderPathKey].templateFilePath
             }
 
             # Parameter file test cases
@@ -432,20 +524,16 @@ Describe 'Deployment template tests' -Tag Template {
             $deploymentFolderTestCases += @{
                 moduleFolderName       = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
                 templateContent        = $templateContent
+                templateFilePath       = $templateFilePath
                 parameterFileTestCases = $parameterFileTestCases
-            }
-        }
-        foreach ($moduleFolderPath in $moduleFolderPathsFiltered) {
-            $deploymentFolderTestCasesException += @{
-                moduleFolderNameException = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
-                templateContent           = $templateContent
             }
         }
 
         It '[<moduleFolderName>] the template file should not be empty' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             $templateContent | Should -Not -Be $null
         }
@@ -454,19 +542,19 @@ Describe 'Deployment template tests' -Tag Template {
             # the actual value changes depending on the scope of the template (RG, subscription, MG, tenant) !!
             # https://docs.microsoft.com/en-us/azure/azure-resource-manager/templates/template-syntax
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
 
             $Schemaverion = $templateContent.'$schema'
             $SchemaArray = @()
             if ($Schemaverion -eq $RGdeployment) {
                 $SchemaOutput = $true
-            } elseif ($Schemaverion -eq $Subscriptiondeployment) {
+            } elseIf ($Schemaverion -eq $Subscriptiondeployment) {
                 $SchemaOutput = $true
-            } elseif ($Schemaverion -eq $MGdeployment) {
+            } elseIf ($Schemaverion -eq $MGdeployment) {
                 $SchemaOutput = $true
-            } elseif ($Schemaverion -eq $Tenantdeployment) {
+            } elseIf ($Schemaverion -eq $Tenantdeployment) {
                 $SchemaOutput = $true
             } else {
                 $SchemaOutput = $false
@@ -476,9 +564,10 @@ Describe 'Deployment template tests' -Tag Template {
         }
 
         It '[<moduleFolderName>] Template schema should use HTTPS reference' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             $Schemaverion = $templateContent.'$schema'
             ($Schemaverion.Substring(0, 5) -eq 'https') | Should -Be $true
@@ -487,18 +576,18 @@ Describe 'Deployment template tests' -Tag Template {
         It '[<moduleFolderName>] All apiVersion properties should be set to a static, hard-coded value' -TestCases $deploymentFolderTestCases {
             #https://docs.microsoft.com/en-us/azure/azure-resource-manager/templates/template-best-practices
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             $ApiVersion = $templateContent.resources.apiVersion
             $ApiVersionArray = @()
             foreach ($API in $ApiVersion) {
                 if ($API.Substring(0, 2) -eq '20') {
                     $ApiVersionOutput = $true
-                } elseif ($API.substring(1, 10) -eq 'parameters') {
+                } elseIf ($API.substring(1, 10) -eq 'parameters') {
                     # An API version should not be referenced as a parameter
                     $ApiVersionOutput = $false
-                } elseif ($API.substring(1, 10) -eq 'variables') {
+                } elseIf ($API.substring(1, 10) -eq 'variables') {
                     # An API version should not be referenced as a variable
                     $ApiVersionOutput = $false
                 } else {
@@ -510,34 +599,37 @@ Describe 'Deployment template tests' -Tag Template {
         }
 
         It '[<moduleFolderName>] the template file should contain required elements: schema, contentVersion, resources' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             $templateContent.Keys | Should -Contain '$schema'
             $templateContent.Keys | Should -Contain 'contentVersion'
             $templateContent.Keys | Should -Contain 'resources'
         }
 
-        It '[<moduleFolderName>] If delete lock is implemented, the template should have a lock parameter with the default value of [NotSpecified]' -TestCases $deploymentFolderTestCases {
+        It '[<moduleFolderName>] If delete lock is implemented, the template should have a lock parameter with the default value of ['''']' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             if ($lock = $templateContent.parameters.lock) {
                 $lock.Keys | Should -Contain 'defaultValue'
-                $lock.defaultValue | Should -Be 'NotSpecified'
+                $lock.defaultValue | Should -Be ''
             }
         }
 
         It '[<moduleFolderName>] Parameter names should be camel-cased (no dashes or underscores and must start with lower-case letter)' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
 
             if (-not $templateContent.parameters) {
-                $true | Should -Be $true
+                Set-ItResult -Skipped -Because 'the module template has no parameters.'
                 return
             }
 
@@ -554,13 +646,14 @@ Describe 'Deployment template tests' -Tag Template {
         }
 
         It '[<moduleFolderName>] Variable names should be camel-cased (no dashes or underscores and must start with lower-case letter)' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
 
             if (-not $templateContent.variables) {
-                $true | Should -Be $true
+                Set-ItResult -Skipped -Because 'the module template has no variables.'
                 return
             }
 
@@ -578,9 +671,10 @@ Describe 'Deployment template tests' -Tag Template {
         }
 
         It '[<moduleFolderName>] Output names should be camel-cased (no dashes or underscores and must start with lower-case letter)' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             $CamelCasingFlag = @()
             $Outputs = $templateContent.outputs.Keys
@@ -596,26 +690,28 @@ Describe 'Deployment template tests' -Tag Template {
         }
 
         It '[<moduleFolderName>] CUA ID deployment should be present in the template' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
-            $CuaIDFlag = @()
+            $enableDefaultTelemetryFlag = @()
             $Schemaverion = $templateContent.'$schema'
             if ((($Schemaverion.Split('/')[5]).Split('.')[0]) -eq (($RGdeployment.Split('/')[5]).Split('.')[0])) {
-                if (($templateContent.resources.type -ccontains 'Microsoft.Resources/deployments' -and $templateContent.resources.condition -like "*[not(empty(parameters('cuaId')))]*") -or ($templateContent.resources.resources.type -ccontains 'Microsoft.Resources/deployments' -and $templateContent.resources.resources.condition -like "*[not(empty(parameters('cuaId')))]*")) {
-                    $CuaIDFlag += $true
+                if (($templateContent.resources.type -ccontains 'Microsoft.Resources/deployments' -and $templateContent.resources.condition -like "*[parameters('enableDefaultTelemetry')]*") -or ($templateContent.resources.resources.type -ccontains 'Microsoft.Resources/deployments' -and $templateContent.resources.resources.condition -like "*[parameters('enableDefaultTelemetry')]*")) {
+                    $enableDefaultTelemetryFlag += $true
                 } else {
-                    $CuaIDFlag += $false
+                    $enableDefaultTelemetryFlag += $false
                 }
             }
-            $CuaIDFlag | Should -Not -Contain $false
+            $enableDefaultTelemetryFlag | Should -Not -Contain $false
         }
 
         It "[<moduleFolderName>] The Location should be defined as a parameter, with the default value of 'resourceGroup().Location' or global for ResourceGroup deployment scope" -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
             )
             $LocationFlag = $true
             $Schemaverion = $templateContent.'$schema'
@@ -634,84 +730,155 @@ Describe 'Deployment template tests' -Tag Template {
             }
         }
 
-        It "[<moduleFolderNameException>] All resources that have a Location property should refer to the Location parameter 'parameters('Location')'" -TestCases $deploymentFolderTestCasesException {
+        It '[<moduleFolderName>] Location output should be returned for resources that use it' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderNameException,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [string] $templateFilePath
             )
-            $LocationParamFlag = @()
-            $Locmandoutput = $templateContent.resources
-            foreach ($Locmand in $Locmandoutput) {
-                if ($Locmand.Keys -contains 'Location' -and $Locmand.Location -eq "[parameters('Location')]") {
-                    $LocationParamFlag += $true
-                } elseif ($Locmand.Keys -notcontains 'Location') {
-                    $LocationParamFlag += $true
-                } elseif ($Locmand.Keys -notcontains 'resourceGroup') {
-                    $LocationParamFlag += $true
-                } else {
-                    $LocationParamFlag += $false
-                }
-                foreach ($Locm in $Locmand.resources) {
-                    if ($Locm.Keys -contains 'Location' -and $Locm.Location -eq "[parameters('Location')]") {
-                        $LocationParamFlag += $true
-                    } elseif ($Locm.Keys -notcontains 'Location') {
-                        $LocationParamFlag += $true
-                    } else {
-                        $LocationParamFlag += $false
-                    }
-                }
+
+            $outputs = $templateContent.outputs
+
+            $primaryResourceType = (Split-Path $TemplateFilePath -Parent).Replace('\', '/').split('/arm/')[1]
+            $primaryResourceTypeResource = $templateContent.resources | Where-Object { $_.type -eq $primaryResourceType }
+
+            if ($primaryResourceTypeResource.keys -contains 'location' -and $primaryResourceTypeResource.location -ne 'global') {
+                # If the main resource has a location property, an output should be returned too
+                $outputs.keys | Should -Contain 'location'
+
+                # It should further reference the location property of the primary resource and not e.g. the location input parameter
+                $outputs.location.value | Should -Match $primaryResourceType
             }
-            $LocationParamFlag | Should -Not -Contain $false
         }
 
-        It '[<moduleFolderName>] Standard outputs should be provided (e.g. resourceName, resourceId, resouceGroupName)' -TestCases $deploymentFolderTestCases {
+        It '[<moduleFolderName>] Resource Group output should exist for resources that are deployed into a resource group scope' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                [string] $templateFilePath
             )
 
-            $Stdoutput = $templateContent.outputs.Keys
-            $i = 0
-            $Schemaverion = $templateContent.'$schema'
-            if ((($Schemaverion.Split('/')[5]).Split('.')[0]) -eq (($RGdeployment.Split('/')[5]).Split('.')[0])) {
-                # Resource Group Level deployment
-                foreach ($Stdo in $Stdoutput) {
-                    if ($Stdo -like '*Name*' -or $Stdo -like '*ResourceId*' -or $Stdo -like '*ResourceGroup*') {
-                        $true | Should -Be $true
-                        $i = $i + 1
-                    }
-                }
-                $i | Should -Not -BeLessThan 3
-            } ElseIf ((($schemaverion.Split('/')[5]).Split('.')[0]) -eq (($Subscriptiondeployment.Split('/')[5]).Split('.')[0])) {
-                # Subscription Level deployment
-                $Stdoutput | Should -Not -BeNullOrEmpty
-            }
+            $outputs = $templateContent.outputs.Keys
+            $deploymentScope = Get-ScopeOfTemplateFile -TemplateFilePath $templateFilePath
 
+            if ($deploymentScope -eq 'resourceGroup') {
+                $outputs | Should -Contain 'resourceGroupName'
+            }
         }
 
-        It "[<moduleFolderName>] parameters' description shoud start either by 'Optional.' or 'Required.' or 'Generated.'" -TestCases $deploymentFolderTestCases {
+        It '[<moduleFolderName>] Resource name output should exist' -TestCases $deploymentFolderTestCases {
+
             param(
-                $moduleFolderName,
-                $templateContent
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                $templateFilePath
             )
 
-            if (-not $templateContent.parameters) {
-                $true | Should -Be $true
+            # check if module contains a 'primary' resource we could draw a name from
+            $moduleResourceType = (Split-Path (($templateFilePath -replace '\\', '/') -split '/arm/')[1] -Parent) -replace '\\', '/'
+            if ($templateContent.resources.type -notcontains $moduleResourceType) {
+                Set-ItResult -Skipped -Because 'the module template has no primary resource to fetch a name from.'
                 return
             }
 
-            $ParamDescriptionFlag = @()
-            $Paramdescoutput = $templateContent.parameters.Keys
-            foreach ($Param in $Paramdescoutput) {
-                $Data = ($templateContent.parameters.$Param.metadata).description
-                if ($Data -like 'Optional. [a-zA-Z]*' -or $Data -like 'Required. [a-zA-Z]*' -or $Data -like 'Generated. [a-zA-Z]*') {
-                    $true | Should -Be $true
-                    $ParamDescriptionFlag += $true
-                } else {
-                    $ParamDescriptionFlag += $false
+            # Otherwise test for standard outputs
+            $outputs = $templateContent.outputs.Keys
+            $outputs | Should -Contain 'name'
+        }
+
+        It '[<moduleFolderName>] Resource ID output should exist' -TestCases $deploymentFolderTestCases {
+
+            param(
+                [string] $moduleFolderName,
+                [hashtable] $templateContent,
+                $templateFilePath
+            )
+
+            # check if module contains a 'primary' resource we could draw a name from
+            $moduleResourceType = (Split-Path (($templateFilePath -replace '\\', '/') -split '/arm/')[1] -Parent) -replace '\\', '/'
+            if ($templateContent.resources.type -notcontains $moduleResourceType) {
+                Set-ItResult -Skipped -Because 'the module template has no primary resource to fetch a resource ID from.'
+                return
+            }
+
+            # Otherwise test for standard outputs
+            $outputs = $templateContent.outputs.Keys
+            $outputs | Should -Contain 'resourceId'
+        }
+
+        It "[<moduleFolderName>] parameters' description should start with a one word category starting with a capital letter, followed by a dot, a space and the actual description text ending with a dot." -TestCases $deploymentFolderTestCases {
+
+            param(
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
+            )
+
+            if (-not $templateContent.parameters) {
+                Set-ItResult -Skipped -Because 'the module template has no parameters.'
+                return
+            }
+
+            $incorrectParameters = @()
+            $templateParameters = $templateContent.parameters.Keys
+            foreach ($parameter in $templateParameters) {
+                $data = ($templateContent.parameters.$parameter.metadata).description
+                if ($data -notmatch '(?s)^[A-Z][a-zA-Z]+\. .+\.$') {
+                    $incorrectParameters += $parameter
                 }
             }
-            $ParamDescriptionFlag | Should -Not -Contain $false
+            $incorrectParameters | Should -BeNullOrEmpty
+        }
+
+        It "[<moduleFolderName>] Conditional parameters' description should contain 'Required if' followed by the condition making the parameter required." -TestCases $deploymentFolderTestCases {
+
+            param(
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
+            )
+
+            if (-not $templateContent.parameters) {
+                Set-ItResult -Skipped -Because 'the module template has no parameters.'
+                return
+            }
+
+            $incorrectParameters = @()
+            $templateParameters = $templateContent.parameters.Keys
+            foreach ($parameter in $templateParameters) {
+                $data = ($templateContent.parameters.$parameter.metadata).description
+                switch -regex ($data) {
+                    '^Conditional. .*' {
+                        if ($data -notmatch '.*\. Required if .*') {
+                            $incorrectParameters += $parameter
+                        }
+                    }
+                }
+            }
+            $incorrectParameters | Should -BeNullOrEmpty
+        }
+
+        It "[<moduleFolderName>] outputs' description should start with a capital letter and contain text ending with a dot." -TestCases $deploymentFolderTestCases {
+
+            param(
+                [string] $moduleFolderName,
+                [hashtable] $templateContent
+            )
+
+            if (-not $templateContent.outputs) {
+                Set-ItResult -Skipped -Because 'the module template has no outputs.'
+                return
+            }
+
+            $incorrectOutputs = @()
+            $templateOutputs = $templateContent.outputs.Keys
+            foreach ($output in $templateOutputs) {
+                $data = ($templateContent.outputs.$output.metadata).description
+                if ($data -notmatch '(?s)^[A-Z].+\.$') {
+                    $incorrectOutputs += $output
+                }
+            }
+            $incorrectOutputs | Should -BeNullOrEmpty
         }
 
         # PARAMETER Tests
@@ -742,30 +909,46 @@ Describe 'Deployment template tests' -Tag Template {
                 $missingParameters.Count | Should -Be 0 -Because ('no required parameters in the template file should be missing in the parameter file. Found missing items: [{0}]' -f ($missingParameters -join ', '))
             }
         }
+    }
 
-        It '[<moduleFolderName>] [Tokens] Parameter files should not contain the default Subscription ID guid' -TestCases $deploymentFolderTestCases {
-            param (
-                [hashtable[]] $ParameterFileTestCases
-            )
-            foreach ($ParameterFileTestCase in $ParameterFileTestCases) {
-                $ParameterFileTokenName = -join ($ParameterFileTestCase.tokenSettings.tokenPrefix, 'subscriptionId', $ParameterFileTestCase.tokenSettings.tokenSuffix)
-                $ParameterFileContent = Get-Content -Path $ParameterFileTestCase.parameterFile_Path
-                $SubscriptionIdKeyCount = ($ParameterFileContent | Select-String -Pattern '"subscriptionId"', "'subscriptionId'", '/subscriptions/' -AllMatches).Matches.Count
-                $SubscriptionIdValueCount = ($ParameterFileContent | Select-String -Pattern "$ParameterFileTokenName" -AllMatches).Matches.Count
-                $SubscriptionIdKeyCount -eq $SubscriptionIdValueCount | Should -Be $true -Because ("Parameter file should not contain the Subscription ID guid, instead should reference a token value '$ParameterFileTokenName'")
+    Context 'Parameter file token tests' {
+
+        # Parameter file test cases
+        $parameterFileTokenTestCases = @()
+
+        foreach ($moduleFolderPath in $moduleFolderPaths) {
+            if (Test-Path (Join-Path $moduleFolderPath '.parameters')) {
+                $ParameterFilePaths = (Get-ChildItem (Join-Path -Path $moduleFolderPath -ChildPath '.parameters' -AdditionalChildPath '*parameters.json') -Recurse -Force).FullName
+                foreach ($ParameterFilePath in $ParameterFilePaths) {
+                    foreach ($token in $enforcedTokenList.Keys) {
+                        $parameterFileTokenTestCases += @{
+                            parameterFilePath = $ParameterFilePath
+                            parameterFileName = Split-Path $ParameterFilePath -Leaf
+                            tokenSettings     = $Settings.parameterFileTokens
+                            tokenName         = $token
+                            tokenValue        = $enforcedTokenList[$token]
+                            moduleFolderName  = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
+                        }
+                    }
+                }
             }
         }
 
-        It '[<moduleFolderName>] [Tokens] Parameter files should not contain the default Tenant ID' -TestCases $deploymentFolderTestCases {
+        It '[<moduleFolderName>] [Tokens] Parameter file [<parameterFileName>] should not contain the plain value for token [<tokenName>] guid' -TestCases $parameterFileTokenTestCases {
             param (
-                [hashtable[]] $ParameterFileTestCases
+                [string] $parameterFilePath,
+                [string] $parameterFileName,
+                [hashtable] $tokenSettings,
+                [string] $tokenName,
+                [string] $tokenValue,
+                [string] $moduleFolderName
             )
-            foreach ($ParameterFileTestCase in $ParameterFileTestCases) {
-                $ParameterFileTokenName = -join ($ParameterFileTestCase.tokenSettings.tokenPrefix, 'tenantId', $ParameterFileTestCase.tokenSettings.tokenSuffix)
-                $ParameterFileContent = Get-Content -Path $ParameterFileTestCase.parameterFile_Path
-                $TenantIdKeyCount = ($ParameterFileContent | Select-String -Pattern '"tenantId"', "'tenantId'" -AllMatches).Matches.Count
-                $TenantIdValueCount = ($ParameterFileContent | Select-String -Pattern "$ParameterFileTokenName" -AllMatches).Matches.Count
-                $TenantIdKeyCount -eq $TenantIdValueCount | Should -Be $true -Because ("Parameter file should not contain the Tenant ID guid, instead should reference a token value '$ParameterFileTokenName'")
+            $ParameterFileTokenName = -join ($tokenSettings.tokenPrefix, $tokenName, $tokenSettings.tokenSuffix)
+            $ParameterFileContent = Get-Content -Path $parameterFilePath
+
+            $incorrectReferencesFound = $ParameterFileContent | Select-String -Pattern $tokenValue -AllMatches
+            if ($incorrectReferencesFound.Matches) {
+                $incorrectReferencesFound.Matches.Count | Should -Be 0 -Because ('Parameter file should not contain the [{0}] value, instead should reference the token value [{1}]. Please check the {2} lines: [{3}]' -f $tokenName, $ParameterFileTokenName, $incorrectReferencesFound.Matches.Count, ($incorrectReferencesFound.Line.Trim() -join ",`n"))
             }
         }
     }
@@ -775,19 +958,40 @@ Describe "API version tests [All apiVersions in the template should be 'recent']
 
     $testCases = @()
     $ApiVersions = Get-AzResourceProvider -ListAvailable
-    foreach ($moduleFolderPath in $moduleFolderPathsFiltered) {
+    foreach ($moduleFolderPath in $moduleFolderPaths) {
 
         $moduleFolderName = $moduleFolderPath.Replace('\', '/').Split('/arm/')[1]
 
-        if (Test-Path (Join-Path $moduleFolderPath 'deploy.bicep')) {
-            $templateContent = az bicep build --file (Join-Path $moduleFolderPath 'deploy.bicep') --stdout | ConvertFrom-Json -AsHashtable
-        } elseif (Test-Path (Join-Path $moduleFolderPath 'deploy.json')) {
-            $templateContent = Get-Content (Join-Path $moduleFolderPath 'deploy.json') -Raw | ConvertFrom-Json -AsHashtable
+        # For runtime purposes, we cache the compiled template in a hashtable that uses a formatted relative module path as a key
+        $moduleFolderPathKey = $moduleFolderPath.Split('arm')[1].Replace('\', '/').Trim('/').Replace('/', '-')
+        if (-not ($convertedTemplates.Keys -contains $moduleFolderPathKey)) {
+            if (Test-Path (Join-Path $moduleFolderPath 'deploy.bicep')) {
+                $templateFilePath = Join-Path $moduleFolderPath 'deploy.bicep'
+                $templateContent = az bicep build --file $templateFilePath --stdout --no-restore | ConvertFrom-Json -AsHashtable
+
+                if (-not $templateContent) {
+                    throw ($bicepTemplateCompilationFailedException -f $templateFilePath)
+                }
+            } elseIf (Test-Path (Join-Path $moduleFolderPath 'deploy.json')) {
+                $templateFilePath = Join-Path $moduleFolderPath 'deploy.json'
+                $templateContent = Get-Content $templateFilePath -Raw | ConvertFrom-Json -AsHashtable
+
+                if (-not $templateContent) {
+                    throw ($jsonTemplateLoadFailedException -f $templateFilePath)
+                }
+            } else {
+                throw ($templateNotFoundException -f $moduleFolderPath)
+            }
+            $convertedTemplates[$moduleFolderPathKey] = @{
+                templateFilePath = $templateFilePath
+                templateContent  = $templateContent
+            }
         } else {
-            throw "No template file found in folder [$moduleFolderPath]"
+            $templateContent = $convertedTemplates[$moduleFolderPathKey].templateContent
+            $templateFilePath = $convertedTemplates[$moduleFolderPathKey].templateFilePath
         }
 
-        $nestedResources = Get-NestedResourceList -TemplateContent $templateContent | Where-Object {
+        $nestedResources = Get-NestedResourceList -TemplateFileContent $templateContent | Where-Object {
             $_.type -notin @('Microsoft.Resources/deployments') -and $_
         } | Select-Object 'Type', 'ApiVersion' -Unique | Sort-Object Type
 
@@ -849,13 +1053,14 @@ Describe "API version tests [All apiVersions in the template should be 'recent']
         }
     }
 
-    It 'In [<moduleName>] used resource type [<resourceType>] should use on of the recent API version(s). Currently using [<TargetApi>]' -TestCases $TestCases {
+    It 'In [<moduleName>] used resource type [<resourceType>] should use one of the recent API version(s). Currently using [<TargetApi>]' -TestCases $TestCases {
+
         param(
-            $moduleName,
-            $resourceType,
-            $TargetApi,
-            $ProviderNamespace,
-            $AvailableApiVersions
+            [string] $moduleName,
+            [string] $resourceType,
+            [string] $TargetApi,
+            [string] $ProviderNamespace,
+            [object[]] $AvailableApiVersions
         )
 
         $namespaceResourceTypes = ($AvailableApiVersions | Where-Object { $_.ProviderNamespace -eq $ProviderNamespace }).ResourceTypes

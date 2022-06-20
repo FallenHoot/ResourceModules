@@ -4,10 +4,10 @@ param name string
 @description('Optional. Array of Policies to apply to the Service API.')
 param policies array = []
 
-@description('Required. The name of the of the API Management service.')
+@description('Conditional. The name of the parent API Management service. Required if the template is used in a standalone deployment.')
 param apiManagementServiceName string
 
-@description('Optional. Describes the Revision of the API. If no value is provided, default revision 1 is created')
+@description('Optional. Describes the Revision of the API. If no value is provided, default revision 1 is created.')
 param apiRevision string = ''
 
 @description('Optional. Description of the API Revision.')
@@ -20,10 +20,10 @@ param apiRevisionDescription string = ''
 ])
 param apiType string = 'http'
 
-@description('Optional. Indicates the Version identifier of the API if the API is versioned')
+@description('Optional. Indicates the Version identifier of the API if the API is versioned.')
 param apiVersion string = ''
 
-@description('Optional. Indicates the Version identifier of the API version set')
+@description('Optional. Indicates the Version identifier of the API version set.')
 param apiVersionSetId string = ''
 
 @description('Optional. Description of the API Version.')
@@ -32,8 +32,8 @@ param apiVersionDescription string = ''
 @description('Optional. Collection of authentication settings included into this API.')
 param authenticationSettings object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
 @description('Optional. Description of the API. May include HTML formatting tags.')
 param apiDescription string = ''
@@ -63,7 +63,7 @@ param isCurrent bool = true
 @description('Required. Relative URL uniquely identifying this API and all of its resource paths within the API Management service instance. It is appended to the API endpoint base URL specified during the service instance creation to form a public URL for this API.')
 param path string
 
-@description('Optional. Describes on which protocols the operations in this API can be invoked. - HTTP or HTTPS')
+@description('Optional. Describes on which protocols the operations in this API can be invoked. - HTTP or HTTPS.')
 param protocols array = [
   'https'
 ]
@@ -94,9 +94,18 @@ param value string = ''
 @description('Optional. Criteria to limit import of WSDL to a subset of the document.')
 param wsdlSelector object = {}
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+var enableReferencedModulesTelemetry = false
+
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource service 'Microsoft.ApiManagement/service@2021-08-01' existing = {
@@ -137,14 +146,15 @@ module policy 'policies/deploy.bicep' = [for (policy, index) in policies: {
     apiName: api.name
     format: contains(policy, 'format') ? policy.format : 'xml'
     value: policy.value
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }]
 
-@description('The name of the API management service API')
+@description('The name of the API management service API.')
 output name string = api.name
 
-@description('The resource ID of the API management service API')
+@description('The resource ID of the API management service API.')
 output resourceId string = api.id
 
-@description('The resource group the API management service API was deployed to')
+@description('The resource group the API management service API was deployed to.')
 output resourceGroupName string = resourceGroup().name

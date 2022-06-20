@@ -2,31 +2,43 @@
 
 This module deploys an administrator for the SQL managed instance
 
+## Navigation
+
+- [Resource Types](#Resource-Types)
+- [Parameters](#Parameters)
+- [Outputs](#Outputs)
+
 ## Resource Types
 
 | Resource Type | API Version |
 | :-- | :-- |
-| `Microsoft.Sql/managedInstances/administrators` | 2021-02-01-preview |
+| `Microsoft.Sql/managedInstances/administrators` | [2021-02-01-preview](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Sql/2021-02-01-preview/managedInstances/administrators) |
 
 ## Parameters
 
-| Parameter Name | Type | Default Value | Possible Values | Description |
-| :-- | :-- | :-- | :-- | :-- |
-| `cuaId` | string |  |  | Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered |
-| `login` | string |  |  | Required. Login name of the managed instance administrator. |
-| `managedInstanceName` | string |  |  | Required. Name of the SQL managed instance. |
-| `name` | string | `ActiveDirectory` |  | Optional. The name of the managed instance administrator |
-| `sid` | string |  |  | Required. SID (object ID) of the managed instance administrator. |
-| `tenantId` | string |  |  | Optional. Tenant ID of the managed instance administrator. |
+**Required parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `login` | string | Login name of the managed instance administrator. |
+| `sid` | string | SID (object ID) of the managed instance administrator. |
+
+**Conditional parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `managedInstanceName` | string | The name of the parent SQL managed instance. Required if the template is used in a standalone deployment. |
+
+**Optional parameters**
+| Parameter Name | Type | Default Value | Description |
+| :-- | :-- | :-- | :-- |
+| `enableDefaultTelemetry` | bool | `True` | Enable telemetry via the Customer Usage Attribution ID (GUID). |
+| `name` | string | `'ActiveDirectory'` | The name of the managed instance administrator. |
+| `tenantId` | string | `''` | Tenant ID of the managed instance administrator. |
+
 
 ## Outputs
 
 | Output Name | Type | Description |
 | :-- | :-- | :-- |
-| `name` | string | The name of the deployed managed instance |
-| `resourceGroupName` | string | The resource group of the deployed managed instance |
-| `resourceId` | string | The resource ID of the deployed managed instance |
-
-## Template references
-
-- [Managedinstances/Administrators](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Sql/2021-02-01-preview/managedInstances/administrators)
+| `name` | string | The name of the deployed managed instance. |
+| `resourceGroupName` | string | The resource group of the deployed managed instance. |
+| `resourceId` | string | The resource ID of the deployed managed instance. |

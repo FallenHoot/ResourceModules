@@ -1,7 +1,7 @@
-@description('Required. Name of the Azure Recovery Service Vault')
+@description('Conditional. The name of the parent Azure Recovery Service Vault. Required if the template is used in a standalone deployment.')
 param recoveryVaultName string
 
-@description('Optional. Name of the Azure Recovery Service Vault Backup Policy')
+@description('Optional. Name of the Azure Recovery Service Vault Backup Policy.')
 param name string = 'vaultconfig'
 
 @description('Optional. Enable this setting to protect hybrid backups against accidental deletes and add additional layer of authentication for critical operations.')
@@ -11,17 +11,17 @@ param name string = 'vaultconfig'
 ])
 param enhancedSecurityState string = 'Enabled'
 
-@description('Optional. ResourceGuard Operation Requests')
+@description('Optional. ResourceGuard Operation Requests.')
 param resourceGuardOperationRequests array = []
 
-@description('Optional. Enable this setting to protect backup data for Azure VM, SQL Server in Azure VM and SAP HANA in Azure VM from accidental deletes')
+@description('Optional. Enable this setting to protect backup data for Azure VM, SQL Server in Azure VM and SAP HANA in Azure VM from accidental deletes.')
 @allowed([
   'Disabled'
   'Enabled'
 ])
 param softDeleteFeatureState string = 'Enabled'
 
-@description('Optional. Storage type')
+@description('Optional. Storage type.')
 @allowed([
   'GeoRedundant'
   'LocallyRedundant'
@@ -30,7 +30,7 @@ param softDeleteFeatureState string = 'Enabled'
 ])
 param storageModelType string = 'GeoRedundant'
 
-@description('Optional. Storage type')
+@description('Optional. Storage type.')
 @allowed([
   'GeoRedundant'
   'LocallyRedundant'
@@ -46,12 +46,19 @@ param storageType string = 'GeoRedundant'
 ])
 param storageTypeState string = 'Locked'
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId './.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource rsv 'Microsoft.RecoveryServices/vaults@2021-12-01' existing = {
@@ -71,10 +78,10 @@ resource backupConfig 'Microsoft.RecoveryServices/vaults/backupconfig@2021-10-01
   }
 }
 
-@description('The name of the backup config')
+@description('The name of the backup config.')
 output name string = backupConfig.name
 
-@description('The resource ID of the backup config')
+@description('The resource ID of the backup config.')
 output resourceId string = backupConfig.id
 
 @description('The name of the resource group the backup config was created in.')

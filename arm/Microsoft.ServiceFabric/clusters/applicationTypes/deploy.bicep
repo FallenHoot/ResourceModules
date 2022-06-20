@@ -1,4 +1,4 @@
-@description('Required. Name of the Service Fabric cluster.')
+@description('Conditional. The name of the parent Service Fabric cluster. Required if the template is used in a standalone deployment.')
 param serviceFabricClusterName string = ''
 
 @description('Optional. Application type name.')
@@ -7,12 +7,19 @@ param name string = 'defaultApplicationType'
 @description('Optional. Tags of the resource.')
 param tags object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource serviceFabricCluster 'Microsoft.ServiceFabric/clusters@2021-06-01' existing = {

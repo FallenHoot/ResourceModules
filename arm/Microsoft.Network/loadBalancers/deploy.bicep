@@ -1,4 +1,4 @@
-@description('Required. The Proximity Placement Groups Name')
+@description('Required. The Proximity Placement Groups Name.')
 param name string
 
 @description('Optional. Location for all resources.')
@@ -11,17 +11,17 @@ param location string = resourceGroup().location
 ])
 param loadBalancerSku string = 'Standard'
 
-@description('Required. Array of objects containing all frontend IP configurations')
+@description('Required. Array of objects containing all frontend IP configurations.')
 @minLength(1)
 param frontendIPConfigurations array
 
 @description('Optional. Collection of backend address pools used by a load balancer.')
 param backendAddressPools array = []
 
-@description('Optional. Array of objects containing all load balancing rules')
+@description('Optional. Array of objects containing all load balancing rules.')
 param loadBalancingRules array = []
 
-@description('Optional. Array of objects containing all probes, these are references in the load balancing rules')
+@description('Optional. Array of objects containing all probes, these are references in the load balancing rules.')
 param probes array = []
 
 @description('Optional. Specifies the number of days that logs will be kept for; a value of 0 will retain data indefinitely.')
@@ -42,21 +42,21 @@ param diagnosticEventHubAuthorizationRuleId string = ''
 param diagnosticEventHubName string = ''
 
 @allowed([
+  ''
   'CanNotDelete'
-  'NotSpecified'
   'ReadOnly'
 ])
 @description('Optional. Specify the type of lock.')
-param lock string = 'NotSpecified'
+param lock string = ''
 
-@description('Optional. Array of role assignment objects that contain the \'roleDefinitionIdOrName\' and \'principalId\' to define RBAC role assignments on this resource. In the roleDefinitionIdOrName attribute, you can provide either the display name of the role definition, or its fully qualified ID in the following format: \'/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11\'')
+@description('Optional. Array of role assignment objects that contain the \'roleDefinitionIdOrName\' and \'principalId\' to define RBAC role assignments on this resource. In the roleDefinitionIdOrName attribute, you can provide either the display name of the role definition, or its fully qualified ID in the following format: \'/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11\'.')
 param roleAssignments array = []
 
 @description('Optional. Tags of the resource.')
 param tags object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
 @description('Optional. Collection of inbound NAT Rules used by a load balancer. Defining inbound NAT rules on your load balancer is mutually exclusive with defining an inbound NAT pool. Inbound NAT pools are referenced from virtual machine scale sets. NICs that are associated with individual virtual machines cannot reference an Inbound NAT pool. They have to reference individual inbound NAT rules.')
 param inboundNatRules array = []
@@ -64,24 +64,24 @@ param inboundNatRules array = []
 @description('Optional. The outbound rules.')
 param outboundRules array = []
 
-var frontendsSubnets = [for item in frontendIPConfigurations: {
-  id: item.subnetId
-}]
-var frontendsPublicIPAddresses = [for item in frontendIPConfigurations: {
-  id: item.publicIPAddressId
-}]
-var frontendsObj = {
-  subnets: frontendsSubnets
-  publicIPAddresses: frontendsPublicIPAddresses
-}
-
 var frontendIPConfigurations_var = [for (frontendIPConfiguration, index) in frontendIPConfigurations: {
   name: frontendIPConfiguration.name
   properties: {
-    subnet: !empty(frontendIPConfiguration.subnetId) ? frontendsObj.subnets[index] : null
-    publicIPAddress: !empty(frontendIPConfiguration.publicIPAddressId) ? frontendsObj.publicIPAddresses[index] : null
-    privateIPAddress: !empty(frontendIPConfiguration.privateIPAddress) ? frontendIPConfiguration.privateIPAddress : null
-    privateIPAllocationMethod: !empty(frontendIPConfiguration.subnetId) ? (empty(frontendIPConfiguration.privateIPAddress) ? 'Dynamic' : 'Static') : null
+    subnet: contains(frontendIPConfiguration, 'subnetId') && !empty(frontendIPConfiguration.subnetId) ? {
+      id: frontendIPConfiguration.subnetId
+    } : null
+    publicIPAddress: contains(frontendIPConfiguration, 'publicIPAddressId') && !empty(frontendIPConfiguration.publicIPAddressId) ? {
+      id: frontendIPConfiguration.publicIPAddressId
+    } : null
+    privateIPAddress: contains(frontendIPConfiguration, 'privateIPAddress') && !empty(frontendIPConfiguration.privateIPAddress) ? frontendIPConfiguration.privateIPAddress : null
+    privateIPAddressVersion: contains(frontendIPConfiguration, 'privateIPAddressVersion') ? frontendIPConfiguration.privateIPAddressVersion : 'IPv4'
+    privateIPAllocationMethod: contains(frontendIPConfiguration, 'subnetId') && !empty(frontendIPConfiguration.subnetId) ? (contains(frontendIPConfiguration, 'privateIPAddress') ? 'Static' : 'Dynamic') : null
+    gatewayLoadBalancer: contains(frontendIPConfiguration, 'gatewayLoadBalancer') && !empty(frontendIPConfiguration.gatewayLoadBalancer) ? {
+      id: frontendIPConfiguration.gatewayLoadBalancer
+    } : null
+    publicIPPrefix: contains(frontendIPConfiguration, 'publicIPPrefix') && !empty(frontendIPConfiguration.publicIPPrefix) ? {
+      id: frontendIPConfiguration.publicIPPrefix
+    } : null
   }
 }]
 
@@ -130,22 +130,31 @@ var probes_var = [for probe in probes: {
   name: probe.name
   properties: {
     protocol: contains(probe, 'protocol') ? probe.protocol : 'Tcp'
-    requestPath: (contains(probe, 'protocol') && toLower(probe.protocol) == 'tcp') ? null : probe.requestPath
+    requestPath: toLower(probe.protocol) != 'tcp' ? probe.requestPath : null
     port: contains(probe, 'port') ? probe.port : 80
     intervalInSeconds: contains(probe, 'intervalInSeconds') ? probe.intervalInSeconds : 5
     numberOfProbes: contains(probe, 'numberOfProbes') ? probe.numberOfProbes : 2
   }
 }]
 
+var backendAddressPoolNames = [for backendAddressPool in backendAddressPools: {
+  name: backendAddressPool.name
+}]
+
 @description('Optional. The name of metrics that will be streamed.')
 @allowed([
   'AllMetrics'
 ])
-param metricsToEnable array = [
+param diagnosticMetricsToEnable array = [
   'AllMetrics'
 ]
 
-var diagnosticsMetrics = [for metric in metricsToEnable: {
+@description('Optional. The name of the diagnostic setting, if deployed.')
+param diagnosticSettingsName string = '${name}-diagnosticSettings'
+
+var enableReferencedModulesTelemetry = false
+
+var diagnosticsMetrics = [for metric in diagnosticMetricsToEnable: {
   category: metric
   timeGrain: null
   enabled: true
@@ -155,9 +164,16 @@ var diagnosticsMetrics = [for metric in metricsToEnable: {
   }
 }]
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name, location)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource loadBalancer 'Microsoft.Network/loadBalancers@2021-05-01' = {
@@ -169,20 +185,21 @@ resource loadBalancer 'Microsoft.Network/loadBalancers@2021-05-01' = {
   }
   properties: {
     frontendIPConfigurations: frontendIPConfigurations_var
-    backendAddressPools: backendAddressPools
     loadBalancingRules: loadBalancingRules_var
+    backendAddressPools: backendAddressPoolNames
     outboundRules: outboundRules_var
     probes: probes_var
   }
 }
 
 module loadBalancer_backendAddressPools 'backendAddressPools/deploy.bicep' = [for (backendAddressPool, index) in backendAddressPools: {
-  name: '${uniqueString(deployment().name, location)}-LoadBalancer-backendAddressPools-${index}'
+  name: '${uniqueString(deployment().name, location)}-loadBalancer-backendAddressPools-${index}'
   params: {
     loadBalancerName: loadBalancer.name
     name: backendAddressPool.name
-    loadBalancerBackendAddresses: contains(backendAddressPool, 'loadBalancerBackendAddresses') ? backendAddressPool.loadBalancerBackendAddresses : []
-    tunnelInterfaces: contains(backendAddressPool, 'tunnelInterfaces') ? backendAddressPool.tunnelInterfaces : []
+    tunnelInterfaces: contains(backendAddressPool, 'tunnelInterfaces') && !empty(backendAddressPool.tunnelInterfaces) ? backendAddressPool.tunnelInterfaces : []
+    loadBalancerBackendAddresses: contains(backendAddressPool, 'loadBalancerBackendAddresses') && !empty(backendAddressPool.loadBalancerBackendAddresses) ? backendAddressPool.loadBalancerBackendAddresses : []
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }]
 
@@ -201,23 +218,24 @@ module loadBalancer_inboundNATRules 'inboundNatRules/deploy.bicep' = [for (inbou
     frontendPortRangeStart: contains(inboundNATRule, 'frontendPortRangeStart') ? inboundNATRule.frontendPortRangeStart : -1
     idleTimeoutInMinutes: contains(inboundNATRule, 'idleTimeoutInMinutes') ? inboundNATRule.idleTimeoutInMinutes : 4
     protocol: contains(inboundNATRule, 'protocol') ? inboundNATRule.protocol : 'Tcp'
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
   dependsOn: [
     loadBalancer_backendAddressPools
   ]
 }]
 
-resource loadBalancer_lock 'Microsoft.Authorization/locks@2017-04-01' = if (lock != 'NotSpecified') {
+resource loadBalancer_lock 'Microsoft.Authorization/locks@2017-04-01' = if (!empty(lock)) {
   name: '${loadBalancer.name}-${lock}-lock'
   properties: {
-    level: lock
+    level: any(lock)
     notes: lock == 'CanNotDelete' ? 'Cannot delete resource or child resources.' : 'Cannot modify the resource or child resources.'
   }
   scope: loadBalancer
 }
 
 resource loadBalancer_diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(diagnosticStorageAccountId) || !empty(diagnosticWorkspaceId) || !empty(diagnosticEventHubAuthorizationRuleId) || !empty(diagnosticEventHubName)) {
-  name: '${loadBalancer.name}-diagnosticSettings'
+  name: diagnosticSettingsName
   properties: {
     storageAccountId: !empty(diagnosticStorageAccountId) ? diagnosticStorageAccountId : null
     workspaceId: !empty(diagnosticWorkspaceId) ? diagnosticWorkspaceId : null
@@ -228,20 +246,28 @@ resource loadBalancer_diagnosticSettings 'Microsoft.Insights/diagnosticSettings@
   scope: loadBalancer
 }
 
-module loadBalancer_rbac '.bicep/nested_rbac.bicep' = [for (roleAssignment, index) in roleAssignments: {
+module loadBalancer_rbac '.bicep/nested_roleAssignments.bicep' = [for (roleAssignment, index) in roleAssignments: {
   name: '${uniqueString(deployment().name, location)}-LoadBalancer-Rbac-${index}'
   params: {
+    description: contains(roleAssignment, 'description') ? roleAssignment.description : ''
     principalIds: roleAssignment.principalIds
+    principalType: contains(roleAssignment, 'principalType') ? roleAssignment.principalType : ''
     roleDefinitionIdOrName: roleAssignment.roleDefinitionIdOrName
     resourceId: loadBalancer.id
   }
 }]
 
-@description('The name of the load balancer')
+@description('The name of the load balancer.')
 output name string = loadBalancer.name
 
-@description('The resource ID of the load balancer')
+@description('The resource ID of the load balancer.')
 output resourceId string = loadBalancer.id
 
-@description('The resource group the load balancer was deployed into')
+@description('The resource group the load balancer was deployed into.')
 output resourceGroupName string = resourceGroup().name
+
+@description('The backend address pools available in the load balancer.')
+output backendpools array = loadBalancer.properties.backendAddressPools
+
+@description('The location the resource was deployed into.')
+output location string = loadBalancer.location

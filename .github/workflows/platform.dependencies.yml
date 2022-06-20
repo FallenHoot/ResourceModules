@@ -7,12 +7,12 @@ on:
         type: boolean
         description: 'Enable SqlMi dependencies deployment'
         required: false
-        default: 'false'
+        default: false
       deployVhdDependencies:
         type: boolean
         description: 'Enable deployment of a vhd stored in a blob container'
         required: false
-        default: 'false'
+        default: false
 
   # push:
   #   branches:
@@ -23,7 +23,7 @@ on:
   #     - 'utilities/pipelines/dependencies/**'
 
 env:
-  defaultLocation: 'WestEurope'
+  location: 'WestEurope'
   defaultResourceGroupName: 'validation-rg'
   resourceGroupNameArtifacts: 'artifacts-rg'
   removeDeployment: 'false'
@@ -43,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        parameterFilePaths: ['validation.parameters.json']
+        parameterFilePaths: ['validation.parameters.json', 'locks.parameters.json']
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v2
@@ -54,7 +54,35 @@ jobs:
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
+          resourceGroupName: '${{ env.defaultResourceGroupName }}'
+          subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
+          managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
+          removeDeployment: '${{ env.removeDeployment }}'
+
+  job_deploy_ppg:
+    runs-on: ubuntu-20.04
+    name: 'Deploy proximity placement group'
+    env:
+      namespace: 'Microsoft.Compute\proximityPlacementGroups'
+    needs:
+      - job_deploy_rg
+    strategy:
+      fail-fast: false
+      matrix:
+        parameterFilePaths: ['parameters.json']
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: 'Deploy module'
+        uses: ./.github/actions/templates/validateModuleDeployment
+        with:
+          templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
+          parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -78,17 +106,19 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         id: deploy_msi
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
           removeDeployment: '${{ env.removeDeployment }}'
+
       - name: Set msi principal ID output
         id: print_msi_prinId
         uses: azure/powershell@v1
@@ -100,11 +130,11 @@ jobs:
             Write-Output ('::set-output name={0}::{1}' -f 'msiPrincipalId', $msiPrincipalId)
           azPSVersion: 'latest'
 
-  job_deploy_pa:
+  job_deploy_sf:
     runs-on: ubuntu-20.04
-    name: 'Deploy policy assignment'
+    name: 'Deploy server farm'
     env:
-      namespace: 'Microsoft.Authorization\policyAssignments'
+      namespace: 'Microsoft.Web/serverfarms'
     needs:
       - job_deploy_rg
     strategy:
@@ -116,12 +146,69 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
-          templateFilePath: 'arm/${{ env.namespace }}/.bicep/nested_policyAssignments_sub.bicep'
+          templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
+          resourceGroupName: '${{ env.defaultResourceGroupName }}'
+          subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
+          managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
+          removeDeployment: '${{ env.removeDeployment }}'
+
+  job_deploy_app:
+    runs-on: ubuntu-20.04
+    name: 'Deploy app'
+    env:
+      namespace: 'Microsoft.Web/sites'
+    needs:
+      - job_deploy_sf
+    strategy:
+      fail-fast: false
+      matrix:
+        parameterFilePaths: ['parameters.json']
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: 'Deploy module'
+        uses: ./.github/actions/templates/validateModuleDeployment
+        with:
+          templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
+          parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
+          location: '${{ env.location }}'
+          resourceGroupName: '${{ env.defaultResourceGroupName }}'
+          subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
+          managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
+          removeDeployment: '${{ env.removeDeployment }}'
+
+  job_deploy_pa:
+    runs-on: ubuntu-20.04
+    name: 'Deploy policy assignment'
+    env:
+      namespace: 'Microsoft.Authorization\policyAssignments'
+    needs:
+      - job_deploy_rg
+    strategy:
+      fail-fast: false
+      matrix:
+        parameterFilePaths: ['mg.parameters.json', 'sub.parameters.json']
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: 'Deploy module'
+        uses: ./.github/actions/templates/validateModuleDeployment
+        with:
+          templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
+          parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -143,12 +230,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -164,18 +252,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        parameterFilePaths: ['appi.parameters.json', 'parameters.json']
+        parameterFilePaths:
+          ['appi.parameters.json', 'aut.parameters.json', 'sol.parameters.json', 'parameters.json']
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -198,12 +288,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -221,6 +312,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Setup agent'
         shell: pwsh
         run: |
@@ -234,30 +326,42 @@ jobs:
 
           # Set agent up
           Set-EnvironmentOnAgent -PSModules $Modules
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: true
+
       - name: Run PowerShell
         uses: azure/powershell@v1
         with:
           inlineScript: |
-
             $parameterFilePath = Join-Path $env:GITHUB_WORKSPACE '${{ env.dependencyPath }}' '${{ env.namespace }}' 'parameters' 'parameters.json'
             # Load used functions
             . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'sharedScripts' 'Export-ContentToBlob.ps1')
-            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInParameterFile.ps1')
+            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInFile.ps1')
 
             # Replace tokens in parameter file
-            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json
+            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json -AsHashTable
             $ConvertTokensInputs = @{
-                ParameterFilePath                 = $parameterFilePath
-                LocalCustomParameterFileTokens    = $Settings.parameterFileTokens.localTokens.tokens
-                TokenPrefix                       = $Settings.parameterFileTokens.tokenPrefix
-                TokenSuffix                       = $Settings.parameterFileTokens.tokenSuffix
+                FilePath    = $parameterFilePath
+                Tokens      = @{}
+                TokenPrefix = $Settings.parameterFileTokens.tokenPrefix
+                TokenSuffix = $Settings.parameterFileTokens.tokenSuffix
             }
-            $null = Convert-TokensInParameterFile @ConvertTokensInputs -Verbose
+
+            # Add local tokens
+            if ($Settings.parameterFileTokens.localTokens) {
+                $tokenMap = @{}
+                foreach ($token in $Settings.parameterFileTokens.localTokens) {
+                    $tokenMap += @{ $token.name = $token.value }
+                }
+                Write-Verbose ('Using local tokens [{0}]' -f ($tokenMap.Keys -join ', ')) -Verbose
+                $ConvertTokensInputs.Tokens += $tokenMap
+            }
+
+            $null = Convert-TokensInFile @ConvertTokensInputs
 
             # Get storage account name
             $storageAccountParameters = (ConvertFrom-Json (Get-Content -path $parameterFilePath -Raw)).parameters
@@ -292,12 +396,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -324,17 +429,19 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         id: deploy_imgt
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
           removeDeployment: '${{ env.removeDeployment }}'
+
       - name: 'Set image template output'
         id: print_imgt_output
         uses: azure/powershell@v1
@@ -364,6 +471,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Setup agent'
         shell: pwsh
         run: |
@@ -378,11 +486,13 @@ jobs:
 
           # Set agent up
           Set-EnvironmentOnAgent -PSModules $Modules
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: true
+
       - name: 'Trigger building new image'
         uses: azure/powershell@v1
         with:
@@ -394,20 +504,30 @@ jobs:
             Write-Verbose "Trigger new image creation with imageTemplateName $imageTemplateName and imageTemplateResourceGroup $imageTemplateResourceGroup" -Verbose
             Start-AzImageBuilderTemplate -ImageTemplateName $imageTemplateName -ResourceGroupName $imageTemplateResourceGroup
           azPSVersion: 'latest'
+
       - name: 'Copy baked vhd to a storage account'
         uses: azure/powershell@v1
         with:
           inlineScript: |
-
             # Load used functions
-            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInParameterFile.ps1')
+            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInFile.ps1')
 
             # Prepare replace tokens in parameter file
-            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json
+            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json -AsHashTable
             $ConvertTokensInputs = @{
-                LocalCustomParameterFileTokens    = $Settings.parameterFileTokens.localTokens.tokens
-                TokenPrefix                       = $Settings.parameterFileTokens.tokenPrefix
-                TokenSuffix                       = $Settings.parameterFileTokens.tokenSuffix
+                Tokens      = @{}
+                TokenPrefix = $Settings.parameterFileTokens.tokenPrefix
+                TokenSuffix = $Settings.parameterFileTokens.tokenSuffix
+            }
+
+            # Add local tokens
+            if ($Settings.parameterFileTokens.localTokens) {
+                $tokenMap = @{}
+                foreach ($token in $Settings.parameterFileTokens.localTokens) {
+                    $tokenMap += @{ $token.name = $token.value }
+                }
+                Write-Verbose ('Using local tokens [{0}]' -f ($tokenMap.Keys -join ', ')) -Verbose
+                $ConvertTokensInputs.Tokens += $tokenMap
             }
 
             # Retrieving parameters from previous job outputs and parameter files
@@ -417,12 +537,12 @@ jobs:
 
             Write-Verbose "Retrieving parameters from storage account parameter files" -Verbose
             $parameterFilePath = Join-Path $env:GITHUB_WORKSPACE '${{ env.dependencyPath }}' '${{ env.saNamespace }}' 'parameters' 'parameters.json'
-            $null = Convert-TokensInParameterFile @ConvertTokensInputs -ParameterFilePath $parameterFilePath -Verbose
+            $null = Convert-TokensInFile @ConvertTokensInputs -FilePath $parameterFilePath -Verbose
             $storageAccountParameters = (ConvertFrom-Json (Get-Content -path $parameterFilePath -Raw)).parameters
 
             Write-Verbose "Retrieving parameters from image template parameter files" -Verbose
             $parameterFilePath = Join-Path $env:GITHUB_WORKSPACE '${{ env.dependencyPath }}' '${{ env.imgtNamespace }}' 'parameters' 'parameters.json'
-            $null = Convert-TokensInParameterFile @ConvertTokensInputs -ParameterFilePath $parameterFilePath -Verbose
+            $null = Convert-TokensInFile @ConvertTokensInputs -FilePath $parameterFilePath -Verbose
             $imageTemplateParameters = (ConvertFrom-Json (Get-Content -path $parameterFilePath -Raw)).parameters
 
             # Initializing parameters before the blob copy
@@ -473,12 +593,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -500,12 +621,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -527,12 +649,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -555,12 +678,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -583,6 +707,7 @@ jobs:
             'apgw.parameters.json',
             'ase.parameters.json',
             'bastion.parameters.json',
+            'aadds.parameters.json',
             'parameters.json',
           ]
     steps:
@@ -590,12 +715,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -620,12 +746,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -647,20 +774,24 @@ jobs:
           [
             'apgw.parameters.json',
             'bas.parameters.json',
+            'bas.additional.parameters.json',
             'lb.parameters.json',
+            'lb.min.parameters.json',
             'fw.parameters.json',
+            'fw.additional.parameters.json'
           ]
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -684,12 +815,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -713,12 +845,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -742,12 +875,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -772,17 +906,18 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
           removeDeployment: '${{ env.removeDeployment }}'
-          customParameterFileTokens: '[{"Name":"msiPrincipalId","Value":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}]'
+          customParameterFileTokens: '{"msiPrincipalId":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}'
 
   job_deploy_kv:
     runs-on: ubuntu-20.04
@@ -797,26 +932,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        parameterFilePaths: ['parameters.json', 'pe.parameters.json']
+        parameterFilePaths:
+          ['parameters.json', 'pe.parameters.json', 'nopr.parameters.json']
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
           removeDeployment: '${{ env.removeDeployment }}'
-          customParameterFileTokens: '[{"Name":"msiPrincipalId","Value":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}]'
+          customParameterFileTokens: '{"msiPrincipalId":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}'
 
   job_deploy_kv_secrets:
-    runs-on: ubuntu-20.04
+    # Must run on windows as the used `New-SelfSignedCertificate` function is not available on linux
+    runs-on: windows-2022
     name: 'Set key vault secrets keys and certificates'
     env:
       namespace: 'Microsoft.KeyVault\vaults'
@@ -827,6 +965,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Setup agent'
         shell: pwsh
         run: |
@@ -840,33 +979,55 @@ jobs:
 
           # Set agent up
           Set-EnvironmentOnAgent -PSModules $Modules
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: true
+
       - name: 'Set key vault secrets keys and certificates'
         uses: azure/powershell@v1
         with:
           inlineScript: |
-
             $parameterFilePath = Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'dependencies' '${{ env.namespace }}' 'parameters' 'parameters.json'
+            $noprParameterFilePath = Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'dependencies' '${{ env.namespace }}' 'parameters' 'nopr.parameters.json'
             # Load used functions
-            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInParameterFile.ps1')
+            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInFile.ps1')
 
             # Replace tokens in parameter file
-            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json
+            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json -AsHashTable
             $ConvertTokensInputs = @{
-                ParameterFilePath                 = $parameterFilePath
-                LocalCustomParameterFileTokens    = $Settings.parameterFileTokens.localTokens.tokens
-                TokenPrefix                       = $Settings.parameterFileTokens.tokenPrefix
-                TokenSuffix                       = $Settings.parameterFileTokens.tokenSuffix
+                FilePath    = $parameterFilePath
+                Tokens      = @{}
+                TokenPrefix = $Settings.parameterFileTokens.tokenPrefix
+                TokenSuffix = $Settings.parameterFileTokens.tokenSuffix
             }
-            $null = Convert-TokensInParameterFile @ConvertTokensInputs -Verbose
+            $NoprConvertTokensInputs = @{
+                FilePath    = $noprParameterFilePath
+                Tokens      = @{}
+                TokenPrefix = $Settings.parameterFileTokens.tokenPrefix
+                TokenSuffix = $Settings.parameterFileTokens.tokenSuffix
+            }
+            if ($Settings.parameterFileTokens.localTokens) {
+                $tokenMap = @{}
+                foreach ($token in $Settings.parameterFileTokens.localTokens) {
+                    $tokenMap += @{ $token.name = $token.value }
+                }
+                Write-Verbose ('Using local tokens [{0}]' -f ($tokenMap.Keys -join ', ')) -Verbose
+                $ConvertTokensInputs.Tokens += $tokenMap
+                $NoprConvertTokensInputs.Tokens += $tokenMap
+            }
+            $null = Convert-TokensInFile @ConvertTokensInputs
+            $null = Convert-TokensInFile @NoprConvertTokensInputs
 
             # Get key vault name
             $keyVaultParameters = (ConvertFrom-Json (Get-Content -Path $parameterFilePath -Raw)).parameters
             $keyVaultName = $keyVaultParameters.name.value
+
+            $noprKeyVaultParameters = (ConvertFrom-Json (Get-Content -Path $noprParameterFilePath -Raw)).parameters
+            $noprKeyVaultName = $noprKeyVaultParameters.name.value
+
 
             # Generate values
             $usernameString = ( -join ((65..90) + (97..122) | Get-Random -Count 9 -SetSeed 1 | ForEach-Object { [char]$_ + "$_" })).substring(0, 19) # max length
@@ -875,6 +1036,21 @@ jobs:
             $password = ConvertTo-SecureString -String $passwordString -AsPlainText -Force
             $vpnSharedKeyString = (New-Guid).Guid.SubString(0, 32)
             $vpnSharedKey = ConvertTo-SecureString -String $vpnSharedKeyString -AsPlainText -Force
+
+            $namePrefixToken = $Settings.parameterFileTokens.localTokens | Where-Object { $_.name -eq 'namePrefix' }
+            $certInputObject = @{
+                Subject           = 'CN=*.{0}.onmicrosoft.com' -f $namePrefixToken.value
+                DnsName           = '*.{0}.onmicrosoft.com' -f $namePrefixToken.value
+                CertStoreLocation = 'cert:\LocalMachine\My'
+                KeyExportPolicy   = 'Exportable'
+                Provider          = 'Microsoft Enhanced RSA and AES Cryptographic Provider'
+                NotAfter          = (Get-Date).AddMonths(3)
+                HashAlgorithm     = 'SHA256'
+            }
+            $rawCert = New-SelfSignedCertificate @certInputObject
+            Export-PfxCertificate -Cert ('Cert:\localmachine\my\' + $rawCert.Thumbprint) -FilePath "$home/aadds.pfx" -Password $password -Force
+            $rawCertByteStream = Get-Content "$home/aadds.pfx" -AsByteStream
+            $pfxCertificate = ConvertTo-SecureString -String ([System.Convert]::ToBase64String($rawCertByteStream)) -AsPlainText -Force
 
             # Set secrets
             # -------
@@ -886,6 +1062,8 @@ jobs:
               @{ name = 'vpnSharedKey'; secretValue = $vpnSharedKey } # VirtualNetworkGateway
               @{ name = 'apimClientId'; secretValue = $username } # API management
               @{ name = 'apimClientSecret'; secretValue = $password } # API management
+              @{ name = 'pfxCertificatePassword'; secretValue = $password } # AADDS
+              @{ name = 'pfxBase64Certificate'; secretValue = $pfxCertificate } # AADDS
             ) | ForEach-Object {
               $null = Set-AzKeyVaultSecret -VaultName $keyVaultName -Name $_.name -SecretValue $_.secretValue
               Write-Verbose ('Added secret [{0}] to key vault [{1}]' -f $_.name, $keyVaultName) -Verbose
@@ -908,6 +1086,16 @@ jobs:
             ) | ForEach-Object {
                 $null = Add-AzKeyVaultKey -VaultName $keyVaultName -Name $_.name -Destination $_.Destination
                 Write-Verbose ('Added key [{0}] to key vault [{1}]' -f $_.name, $keyVaultName) -Verbose
+
+            }
+
+            # noprKeyVault Keys
+            @(
+              @{ name = 'keyEncryptionKey'; Destination = 'Software' } # Automation Account
+            ) | ForEach-Object {
+                $null = Add-AzKeyVaultKey -VaultName $noprKeyVaultName -Name $_.name -Destination $_.Destination
+                Write-Verbose ('Added key [{0}] to key vault [{1}]' -f $_.name, $noprKeyVaultName) -Verbose
+
             }
           azPSVersion: 'latest'
 
@@ -931,17 +1119,18 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
           removeDeployment: '${{ env.removeDeployment }}'
-          customParameterFileTokens: '[{"Name":"msiPrincipalId","Value":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}]'
+          customParameterFileTokens: '{"msiPrincipalId":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}'
 
   job_deploy_sqlmi_kv_secrets:
     runs-on: ubuntu-20.04
@@ -956,6 +1145,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Setup agent'
         shell: pwsh
         run: |
@@ -975,24 +1165,35 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: true
+
       - name: 'Set sqlmi key vault secrets and keys'
         uses: azure/powershell@v1
         with:
           inlineScript: |
-
             $parameterFilePath = Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'dependencies' '${{ env.namespace }}' 'parameters' 'sqlmi.parameters.json'
             # Load used functions
-            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInParameterFile.ps1')
+            . (Join-Path $env:GITHUB_WORKSPACE 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInFile.ps1')
 
             # Replace tokens in parameter file
-            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json
+            $Settings = Get-Content -Path "settings.json" | ConvertFrom-Json -AsHashTable
             $ConvertTokensInputs = @{
-                ParameterFilePath                 = $parameterFilePath
-                LocalCustomParameterFileTokens    = $Settings.parameterFileTokens.localTokens.tokens
-                TokenPrefix                       = $Settings.parameterFileTokens.tokenPrefix
-                TokenSuffix                       = $Settings.parameterFileTokens.tokenSuffix
+                FilePath    = $parameterFilePath
+                Tokens      = @{}
+                TokenPrefix = $Settings.parameterFileTokens.tokenPrefix
+                TokenSuffix = $Settings.parameterFileTokens.tokenSuffix
             }
-            $null = Convert-TokensInParameterFile @ConvertTokensInputs -Verbose
+
+            # Add local tokens
+            if ($Settings.parameterFileTokens.localTokens) {
+                $tokenMap = @{}
+                foreach ($token in $Settings.parameterFileTokens.localTokens) {
+                    $tokenMap += @{ $token.name = $token.value }
+                }
+                Write-Verbose ('Using local tokens [{0}]' -f ($tokenMap.Keys -join ', ')) -Verbose
+                $ConvertTokensInputs.Tokens += $tokenMap
+            }
+
+            $null = Convert-TokensInFile @ConvertTokensInputs
 
             # Get key vault name
             $keyVaultParameters = (ConvertFrom-Json (Get-Content -Path $parameterFilePath -Raw)).parameters
@@ -1040,12 +1241,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -1067,17 +1269,18 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
-          templateFilePath: 'arm/${{ env.namespace }}/.bicep/nested_rbac_sub.bicep'
+          templateFilePath: 'arm/${{ env.namespace }}/subscription/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
           removeDeployment: '${{ env.removeDeployment }}'
-          customParameterFileTokens: '[{"Name":"msiPrincipalId","Value":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}]'
+          customParameterFileTokens: '{"msiPrincipalId":"${{ needs.job_deploy_msi.outputs.msiPrincipalId }}"}'
 
   job_deploy_vnet:
     runs-on: ubuntu-20.04
@@ -1097,19 +1300,26 @@ jobs:
             '4.azfw.parameters.json',
             '5.aks.parameters.json',
             '7.virtualHubConnection.parameters.json',
-            'parameters.json',
+            '8.aadds.parameters.json',
+            '9.azfw.parameters.json',
+            '10.azfw.parameters.json',
+            '11.azfw.parameters.json',
+            '12.bastion.parameters.json',
+            '13.bastion.parameters.json',
+            'parameters.json'
           ]
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -1133,12 +1343,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -1160,12 +1371,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
@@ -1189,12 +1401,41 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: 'Deploy module'
         uses: ./.github/actions/templates/validateModuleDeployment
         with:
           templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
           parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
-          location: '${{ env.defaultLocation }}'
+          location: '${{ env.location }}'
+          resourceGroupName: '${{ env.defaultResourceGroupName }}'
+          subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
+          managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'
+          removeDeployment: '${{ env.removeDeployment }}'
+
+  job_deploy_lb:
+    runs-on: ubuntu-20.04
+    name: 'Deploy load balancers'
+    env:
+      namespace: 'Microsoft.Network\loadBalancers'
+    needs:
+      - job_deploy_vnet
+    strategy:
+      fail-fast: false
+      matrix:
+        parameterFilePaths: ['internal.parameters.json']
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: 'Deploy module'
+        uses: ./.github/actions/templates/validateModuleDeployment
+        with:
+          templateFilePath: 'arm/${{ env.namespace }}/deploy.bicep'
+          parameterFilePath: '${{ env.dependencyPath }}/${{ env.namespace }}/parameters/${{ matrix.parameterFilePaths }}'
+          location: '${{ env.location }}'
           resourceGroupName: '${{ env.defaultResourceGroupName }}'
           subscriptionId: '${{ secrets.ARM_SUBSCRIPTION_ID }}'
           managementGroupId: '${{ secrets.ARM_MGMTGROUP_ID }}'

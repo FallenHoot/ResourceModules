@@ -1,19 +1,26 @@
 @maxLength(24)
-@description('Required. Name of the Storage Account.')
+@description('Conditional. The name of the parent Storage Account. Required if the template is used in a standalone deployment.')
 param storageAccountName string
 
-@description('Optional. The name of the storage container to deploy')
+@description('Optional. The name of the storage container to deploy.')
 param name string = 'default'
 
-@description('Required. The Storage Account ManagementPolicies Rules')
+@description('Required. The Storage Account ManagementPolicies Rules.')
 param rules array
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2021-06-01' existing = {
@@ -31,11 +38,11 @@ resource managementPolicy 'Microsoft.Storage/storageAccounts/managementPolicies@
   }
 }
 
-@description('The resource ID of the deployed management policy')
+@description('The resource ID of the deployed management policy.')
 output resourceId string = managementPolicy.name
 
-@description('The name of the deployed management policy')
+@description('The name of the deployed management policy.')
 output name string = managementPolicy.name
 
-@description('The resource group of the deployed management policy')
+@description('The resource group of the deployed management policy.')
 output resourceGroupName string = resourceGroup().name

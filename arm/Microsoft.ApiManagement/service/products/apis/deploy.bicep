@@ -1,18 +1,25 @@
-@description('Required. The name of the of the API Management service.')
+@description('Conditional. The name of the parent API Management service. Required if the template is used in a standalone deployment.')
 param apiManagementServiceName string
 
-@description('Required. The name of the of the Product.')
+@description('Conditional. The name of the parent Product. Required if the template is used in a standalone deployment.')
 param productName string
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
 @description('Required. Name of the product API.')
 param name string
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource service 'Microsoft.ApiManagement/service@2021-08-01' existing = {
@@ -28,11 +35,11 @@ resource api 'Microsoft.ApiManagement/service/products/apis@2021-08-01' = {
   parent: service::product
 }
 
-@description('The resource ID of the product API')
+@description('The resource ID of the product API.')
 output resourceId string = api.id
 
-@description('The name of the product API')
+@description('The name of the product API.')
 output name string = api.name
 
-@description('The resource group the product API was deployed into')
+@description('The resource group the product API was deployed into.')
 output resourceGroupName string = resourceGroup().name

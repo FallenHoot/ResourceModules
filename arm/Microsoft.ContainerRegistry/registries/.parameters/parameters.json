@@ -5,8 +5,39 @@
         "name": {
             "value": "<<namePrefix>>azacrx001"
         },
+        "lock": {
+            "value": "CanNotDelete"
+        },
         "acrAdminUserEnabled": {
             "value": false
+        },
+        "acrSku": {
+            "value": "Premium"
+        },
+        "exportPolicyStatus": {
+            "value": "enabled"
+        },
+        "quarantinePolicyStatus": {
+            "value": "enabled"
+        },
+        "trustPolicyStatus": {
+            "value": "enabled"
+        },
+        "replications": {
+            "value": [
+                {
+                    "name": "northeurope",
+                    "location": "northeurope"
+                }
+            ]
+        },
+        "webhooks": {
+            "value": [
+                {
+                    "name": "<<namePrefix>>azacrx001webhook",
+                    "serviceUri": "https://www.contoso.com/webhook"
+                }
+            ]
         },
         "roleAssignments": {
             "value": [
@@ -40,6 +71,14 @@
             "value": {
                 "/subscriptions/<<subscriptionId>>/resourcegroups/validation-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/adp-<<namePrefix>>-az-msi-x-001": {}
             }
+        },
+        "privateEndpoints": {
+            "value": [
+                {
+                    "subnetResourceId": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/virtualNetworks/adp-<<namePrefix>>-az-vnet-x-001/subnets/<<namePrefix>>-az-subnet-x-005-privateEndpoints",
+                    "service": "registry"
+                }
+            ]
         }
     }
 }

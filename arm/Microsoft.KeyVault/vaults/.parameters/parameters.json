@@ -3,7 +3,10 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "name": {
-            "value": "<<namePrefix>>-az-kvlt-x-001"
+            "value": "<<namePrefix>>-az-kv-x-002"
+        },
+        "lock": {
+            "value": "CanNotDelete"
         },
         "softDeleteRetentionInDays": {
             "value": 7
@@ -23,7 +26,12 @@
             "value": {
                 "bypass": "AzureServices",
                 "defaultAction": "Deny",
-                "virtualNetworkRules": [],
+                "virtualNetworkRules": [
+                    {
+                        "id": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/virtualNetworks/adp-<<namePrefix>>-az-vnet-x-001/subnets/<<namePrefix>>-az-subnet-x-001",
+                        "action": "Allow"
+                    }
+                ],
                 "ipRules": []
             }
         },
@@ -38,23 +46,25 @@
             ]
         },
         "secrets": {
-            "value": [
-                {
-                    "name": "secretName",
-                    "value": "secretValue",
-                    "contentType": "Something",
-                    "attributesExp": 1702648632,
-                    "attributesNbf": 10000,
-                    "roleAssignments": [
-                        {
-                            "roleDefinitionIdOrName": "Reader",
-                            "principalIds": [
-                                "<<deploymentSpId>>"
-                            ]
-                        }
-                    ]
-                }
-            ]
+            "value": {
+                "secureList": [
+                    {
+                        "name": "secretName",
+                        "value": "secretValue",
+                        "contentType": "Something",
+                        "attributesExp": 1702648632,
+                        "attributesNbf": 10000,
+                        "roleAssignments": [
+                            {
+                                "roleDefinitionIdOrName": "Reader",
+                                "principalIds": [
+                                    "<<deploymentSpId>>"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
         },
         "keys": {
             "value": [

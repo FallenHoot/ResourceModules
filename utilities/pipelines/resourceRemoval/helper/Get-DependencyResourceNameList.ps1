@@ -24,7 +24,7 @@ function Get-DependencyResourceNameList {
 
     # Load used function
     $repoRootPath = (Get-Item $PSScriptRoot).Parent.Parent.Parent.Parent.FullName
-    . (Join-Path $repoRootPath 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInParameterFile.ps1')
+    . (Join-Path $repoRootPath 'utilities' 'pipelines' 'tokensReplacement' 'Convert-TokensInFile.ps1')
 
     $parameterFolders = Get-ChildItem -Path $dependencyParameterPath -Recurse -Filter 'parameters' -Directory
     $parameterFilePaths = [System.Collections.ArrayList]@()
@@ -33,16 +33,23 @@ function Get-DependencyResourceNameList {
     }
 
     # Replace tokens in dependency parameter files
-    $Settings = Get-Content -Path (Join-Path $repoRootPath 'settings.json') | ConvertFrom-Json
-    foreach ($parameterFilePath in $parameterFilePaths) {
-        $ConvertTokensInputs = @{
-            ParameterFilePath              = $parameterFilePath
-            LocalCustomParameterFileTokens = $Settings.parameterFileTokens.localTokens.tokens
-            TokenPrefix                    = $Settings.parameterFileTokens.tokenPrefix
-            TokenSuffix                    = $Settings.parameterFileTokens.tokenSuffix
-            Verbose                        = $false
+    $Settings = Get-Content -Path (Join-Path $repoRootPath 'settings.json') | ConvertFrom-Json -AsHashtable
+
+    # Add local tokens
+    if ($Settings.parameterFileTokens.localTokens) {
+        $tokenMap = @{}
+        foreach ($token in $Settings.parameterFileTokens.localTokens) {
+            $tokenMap += @{ $token.name = $token.value }
         }
-        $null = Convert-TokensInParameterFile @ConvertTokensInputs
+        Write-Verbose ('Using local tokens [{0}]' -f ($tokenMap.Keys -join ', '))
+
+        $ConvertTokensInputs = @{
+            Tokens      = $tokenMap
+            TokenPrefix = $Settings.parameterFileTokens.tokenPrefix
+            TokenSuffix = $Settings.parameterFileTokens.tokenSuffix
+            Verbose     = $false
+        }
+        $parameterFilePaths | ForEach-Object { $null = Convert-TokensInFile @ConvertTokensInputs -FilePath $_ }
     }
 
     $dependencyResourceNames = [System.Collections.ArrayList]@()
@@ -51,6 +58,11 @@ function Get-DependencyResourceNameList {
         if ($nameParam = $paramFileContent.parameters.name.value) {
             $dependencyResourceNames += $nameParam
         }
+    }
+
+    if ($Settings.parameterFileTokens.localTokens) {
+        Write-Verbose 'Restoring Tokens'
+        $parameterFilePaths | ForEach-Object { $null = Convert-TokensInFile @ConvertTokensInputs -FilePath $_ -SwapValueWithName $true }
     }
 
     return $dependencyResourceNames

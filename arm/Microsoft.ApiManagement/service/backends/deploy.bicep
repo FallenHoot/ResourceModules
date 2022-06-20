@@ -1,4 +1,4 @@
-@description('Required. The name of the of the API Management service.')
+@description('Conditional. The name of the parent API Management service. Required if the template is used in a standalone deployment.')
 param apiManagementServiceName string
 
 @description('Required. Backend Name.')
@@ -7,16 +7,16 @@ param name string
 @description('Optional. Backend Credentials Contract Properties.')
 param credentials object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
 @description('Optional. Backend Description.')
 param backendDescription string = ''
 
-@description('Optional. Backend communication protocol. - http or soap')
+@description('Optional. Backend communication protocol. - http or soap.')
 param protocol string = 'http'
 
-@description('Optional. Backend Proxy Contract Properties')
+@description('Optional. Backend Proxy Contract Properties.')
 param proxy object = {}
 
 @description('Optional. Management Uri of the Resource in External System. This URL can be the Arm Resource ID of Logic Apps, Function Apps or API Apps.')
@@ -28,7 +28,7 @@ param serviceFabricCluster object = {}
 @description('Optional. Backend Title.')
 param title string = ''
 
-@description('Optional. Backend TLS Properties')
+@description('Optional. Backend TLS Properties.')
 param tls object = {
   validateCertificateChain: false
   validateCertificateName: false
@@ -37,9 +37,16 @@ param tls object = {
 @description('Required. Runtime URL of the Backend.')
 param url string
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource service 'Microsoft.ApiManagement/service@2021-08-01' existing = {
@@ -64,11 +71,11 @@ resource backend 'Microsoft.ApiManagement/service/backends@2021-08-01' = {
   }
 }
 
-@description('The resource ID of the API management service backend')
+@description('The resource ID of the API management service backend.')
 output resourceId string = backend.id
 
-@description('The name of the API management service backend')
+@description('The name of the API management service backend.')
 output name string = backend.name
 
-@description('The resource group the API management service backend was deployed into')
+@description('The resource group the API management service backend was deployed into.')
 output resourceGroupName string = resourceGroup().name

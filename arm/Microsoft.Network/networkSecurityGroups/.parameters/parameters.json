@@ -5,7 +5,10 @@
         "name": {
             "value": "<<namePrefix>>-az-nsg-x-001"
         },
-        "networkSecurityGroupSecurityRules": {
+        "lock": {
+            "value": "CanNotDelete"
+        },
+        "securityRules": {
             "value": [
                 {
                     "name": "Specific",
@@ -57,11 +60,15 @@
                         "access": "Allow",
                         "priority": 102,
                         "direction": "Inbound",
-                        "sourceApplicationSecurityGroupIds": [
-                            "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/applicationSecurityGroups/adp-<<namePrefix>>-az-asg-x-001"
+                        "sourceApplicationSecurityGroups": [
+                            {
+                                "id": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/applicationSecurityGroups/adp-<<namePrefix>>-az-asg-x-001"
+                            }
                         ],
-                        "destinationApplicationSecurityGroupIds": [
-                            "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/applicationSecurityGroups/adp-<<namePrefix>>-az-asg-x-001"
+                        "destinationApplicationSecurityGroups": [
+                            {
+                                "id": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/applicationSecurityGroups/adp-<<namePrefix>>-az-asg-x-001"
+                            }
                         ]
                     }
                 }

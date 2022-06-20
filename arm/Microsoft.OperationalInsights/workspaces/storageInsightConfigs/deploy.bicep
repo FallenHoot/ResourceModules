@@ -1,7 +1,7 @@
-@description('Required. Name of the Log Analytics workspace.')
+@description('Conditional. The name of the parent Log Analytics workspace. Required if the template is used in a standalone deployment.')
 param logAnalyticsWorkspaceName string
 
-@description('Optional. The name of the storage insights config')
+@description('Optional. The name of the storage insights config.')
 param name string = '${last(split(storageAccountId, '/'))}-stinsconfig'
 
 @description('Required. The Azure Resource Manager ID of the storage account resource.')
@@ -16,12 +16,19 @@ param tables array = []
 @description('Optional. Tags to configure in the resource.')
 param tags object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2021-06-01' existing = {
@@ -46,11 +53,11 @@ resource storageinsightconfig 'Microsoft.OperationalInsights/workspaces/storageI
   }
 }
 
-@description('The resource ID of the deployed storage insights configuration')
+@description('The resource ID of the deployed storage insights configuration.')
 output resourceId string = storageinsightconfig.id
 
-@description('The resource group where the storage insight configuration is deployed')
+@description('The resource group where the storage insight configuration is deployed.')
 output resourceGroupName string = resourceGroup().name
 
-@description('The name of the storage insights configuration')
+@description('The name of the storage insights configuration.')
 output name string = storageinsightconfig.name

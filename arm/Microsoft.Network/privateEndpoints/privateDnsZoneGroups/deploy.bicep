@@ -1,32 +1,39 @@
-@description('Required. The name of the private endpoint')
+@description('Conditional. The name of the parent private endpoint. Required if the template is used in a standalone deployment.')
 param privateEndpointName string
 
-@description('Required. List of private DNS resource IDs')
+@description('Required. List of private DNS resource IDs.')
 param privateDNSResourceIds array
 
-@description('Optional. The name of the private DNS Zone Group')
+@description('Optional. The name of the private DNS Zone Group.')
 param name string = 'default'
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 var privateDnsZoneConfigs = [for privateDNSResourceId in privateDNSResourceIds: {
-  name: privateEndpointName
+  name: last(split(privateDNSResourceId, '/'))
   properties: {
     privateDnsZoneId: privateDNSResourceId
   }
 }]
 
-resource privateEndpoint 'Microsoft.Network/privateEndpoints@2021-03-01' existing = {
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2021-05-01' existing = {
   name: privateEndpointName
 }
 
-resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2021-03-01' = {
+resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2021-05-01' = {
   name: name
   parent: privateEndpoint
   properties: {
@@ -34,11 +41,11 @@ resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
   }
 }
 
-@description('The name of the private endpoint DNS zone group')
+@description('The name of the private endpoint DNS zone group.')
 output name string = privateDnsZoneGroup.name
 
-@description('The resource ID of the private endpoint DNS zone group')
+@description('The resource ID of the private endpoint DNS zone group.')
 output resourceId string = privateDnsZoneGroup.id
 
-@description('The resource group the private endpoint DNS zone group was deployed into')
+@description('The resource group the private endpoint DNS zone group was deployed into.')
 output resourceGroupName string = resourceGroup().name

@@ -1,10 +1,10 @@
-@description('Required. Name of the Azure Recovery Service Vault')
+@description('Conditional. The name of the parent Azure Recovery Service Vault. Required if the template is used in a standalone deployment.')
 param recoveryVaultName string
 
-@description('Optional. The name of the backup storage config')
+@description('Optional. The name of the backup storage config.')
 param name string = 'vaultstorageconfig'
 
-@description('Optional. Change Vault Storage Type (Works if vault has not registered any backup instance)')
+@description('Optional. Change Vault Storage Type (Works if vault has not registered any backup instance).')
 @allowed([
   'GeoRedundant'
   'LocallyRedundant'
@@ -13,15 +13,22 @@ param name string = 'vaultstorageconfig'
 ])
 param storageModelType string = 'GeoRedundant'
 
-@description('Optional. Opt in details of Cross Region Restore feature')
+@description('Optional. Opt in details of Cross Region Restore feature.')
 param crossRegionRestoreFlag bool = true
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId './.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource rsv 'Microsoft.RecoveryServices/vaults@2021-12-01' existing = {
@@ -37,10 +44,10 @@ resource backupStorageConfig 'Microsoft.RecoveryServices/vaults/backupstoragecon
   }
 }
 
-@description('The name of the backup storage config')
+@description('The name of the backup storage config.')
 output name string = backupStorageConfig.name
 
-@description('The resource ID of the backup storage config')
+@description('The resource ID of the backup storage config.')
 output resourceId string = backupStorageConfig.id
 
 @description('The name of the Resource Group the backup storage configuration was created in.')

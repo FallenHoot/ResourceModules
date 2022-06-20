@@ -1,10 +1,10 @@
-@description('Required. The name of the service bus namepace queue')
+@description('Required. The name of the service bus namepace queue.')
 param name string
 
-@description('Required. The name of the parent service bus namespace')
+@description('Conditional. The name of the parent Service Bus Namespace. Required if the template is used in a standalone deployment.')
 param namespaceName string
 
-@description('Required. The name of the parent service bus namespace queue')
+@description('Conditional. The name of the parent Service Bus Namespace Queue. Required if the template is used in a standalone deployment.')
 param queueName string
 
 @description('Optional. The rights associated with the rule.')
@@ -15,12 +15,19 @@ param queueName string
 ])
 param rights array = []
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource namespace 'Microsoft.ServiceBus/namespaces@2021-06-01-preview' existing = {

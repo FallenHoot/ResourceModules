@@ -1,7 +1,7 @@
 @description('Optional. Name of the Automation Account job schedule. Must be a GUID. If not provided, a new GUID is generated.')
 param name string = newGuid()
 
-@description('Required. Name of the parent Automation Account.')
+@description('Conditional. The name of the parent Automation Account. Required if the template is used in a standalone deployment.')
 param automationAccountName string
 
 @description('Required. The runbook property associated with the entity.')
@@ -16,12 +16,19 @@ param parameters object = {}
 @description('Optional. The hybrid worker group that the scheduled job should run on.')
 param runOn string = ''
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered.')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource automationAccount 'Microsoft.Automation/automationAccounts@2020-01-13-preview' existing = {
@@ -43,11 +50,11 @@ resource jobSchedule 'Microsoft.Automation/automationAccounts/jobSchedules@2020-
   }
 }
 
-@description('The name of the deployed job schedule')
+@description('The name of the deployed job schedule.')
 output name string = jobSchedule.name
 
-@description('The resource ID of the deployed job schedule')
+@description('The resource ID of the deployed job schedule.')
 output resourceId string = jobSchedule.id
 
-@description('The resource group of the deployed job schedule')
+@description('The resource group of the deployed job schedule.')
 output resourceGroupName string = resourceGroup().name

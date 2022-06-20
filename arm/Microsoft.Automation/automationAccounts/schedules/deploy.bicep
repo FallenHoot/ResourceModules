@@ -1,7 +1,7 @@
 @description('Required. Name of the Automation Account schedule.')
 param name string
 
-@description('Required. Name of the parent Automation Account.')
+@description('Conditional. The name of the parent Automation Account. Required if the template is used in a standalone deployment.')
 param automationAccountName string
 
 @description('Optional. The properties of the create Advanced Schedule.')
@@ -29,7 +29,7 @@ param expiryTime string = ''
 @description('Optional. The frequency of the schedule.')
 param frequency string = 'OneTime'
 
-@description('Optional. Anything')
+@description('Optional. Anything.')
 param interval int = 0
 
 @description('Optional. The start time of the schedule.')
@@ -38,15 +38,22 @@ param startTime string = ''
 @description('Optional. The time zone of the schedule.')
 param timeZone string = ''
 
-@description('Optional. Time used as a basis for e.g. the schedule start date.')
+@description('Generated. Time used as a basis for e.g. the schedule start date.')
 param baseTime string = utcNow('u')
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered.')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource automationAccount 'Microsoft.Automation/automationAccounts@2020-01-13-preview' existing = {
@@ -67,11 +74,11 @@ resource schedule 'Microsoft.Automation/automationAccounts/schedules@2020-01-13-
   }
 }
 
-@description('The name of the deployed schedule')
+@description('The name of the deployed schedule.')
 output name string = schedule.name
 
-@description('The resource ID of the deployed schedule')
+@description('The resource ID of the deployed schedule.')
 output resourceId string = schedule.id
 
-@description('The resource group of the deployed schedule')
+@description('The resource group of the deployed schedule.')
 output resourceGroupName string = resourceGroup().name

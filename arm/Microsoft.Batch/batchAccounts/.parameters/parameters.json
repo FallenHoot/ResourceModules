@@ -5,6 +5,9 @@
         "name": {
             "value": "<<namePrefix>>azbaweux001"
         },
+        "lock": {
+            "value": "CanNotDelete"
+        },
         "diagnosticLogsRetentionInDays": {
             "value": 7
         },
@@ -19,6 +22,21 @@
         },
         "diagnosticEventHubName": {
             "value": "adp-<<namePrefix>>-az-evh-x-001"
+        },
+        "poolAllocationMode": {
+            "value": "BatchService"
+        },
+        "storageAccountId": {
+            "value": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Storage/storageAccounts/adp<<namePrefix>>azsax001"
+        },
+        "systemAssignedIdentity": {
+            "value": true
+        },
+        "storageAuthenticationMode": {
+            "value": "BatchAccountManagedIdentity"
+        },
+        "storageAccessIdentity": {
+            "value": "/subscriptions/<<subscriptionId>>/resourcegroups/validation-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/adp-<<namePrefix>>-az-msi-x-001"
         }
     }
 }

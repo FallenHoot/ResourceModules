@@ -1,7 +1,7 @@
-@description('Required. The name of the parent load balancer')
+@description('Conditional. The name of the parent load balancer. Required if the template is used in a standalone deployment.')
 param loadBalancerName string
 
-@description('Required. The name of the backend address pool')
+@description('Required. The name of the backend address pool.')
 param name string
 
 @description('Optional. An array of backend addresses.')
@@ -10,12 +10,19 @@ param loadBalancerBackendAddresses array = []
 @description('Optional. An array of gateway load balancer tunnel interfaces.')
 param tunnelInterfaces array = []
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource loadBalancer 'Microsoft.Network/loadBalancers@2021-05-01' existing = {
@@ -31,11 +38,11 @@ resource backendAddressPool 'Microsoft.Network/loadBalancers/backendAddressPools
   parent: loadBalancer
 }
 
-@description('The name of the backend address pool')
+@description('The name of the backend address pool.')
 output name string = backendAddressPool.name
 
-@description('The resource ID of the backend address pool')
+@description('The resource ID of the backend address pool.')
 output resourceId string = backendAddressPool.id
 
-@description('The resource group the backend address pool was deployed into')
+@description('The resource group the backend address pool was deployed into.')
 output resourceGroupName string = resourceGroup().name

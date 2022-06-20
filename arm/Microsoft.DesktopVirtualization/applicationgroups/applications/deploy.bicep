@@ -1,4 +1,4 @@
-@sys.description('Required. Name of the Application Group to create the application(s) in.')
+@sys.description('Conditional. The name of the parent Application Group to create the application(s) in. Required if the template is used in a standalone deployment.')
 param appGroupName string
 
 @sys.description('Required. Name of the Application to be created in the Application Group.')
@@ -33,12 +33,19 @@ param iconPath string = ''
 @sys.description('Optional. Index of the icon.')
 param iconIndex int = 0
 
-@sys.description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@sys.description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource applicationGroup 'Microsoft.DesktopVirtualization/applicationGroups@2021-09-03-preview' existing = {
@@ -61,7 +68,7 @@ resource application 'Microsoft.DesktopVirtualization/applicationGroups/applicat
 }
 
 @sys.description('The resource ID of the deployed Application.')
-output applicationResourceIds string = application.id
+output resourceId string = application.id
 
 @sys.description('The name of the Resource Group the AVD Application was created in.')
 output resourceGroupName string = resourceGroup().name

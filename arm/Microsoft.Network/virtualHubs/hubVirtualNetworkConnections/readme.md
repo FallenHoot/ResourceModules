@@ -2,22 +2,38 @@
 
 This module deploys virtual hub virtual network connections.
 
+## Navigation
+
+- [Resource Types](#Resource-Types)
+- [Parameters](#Parameters)
+- [Outputs](#Outputs)
+
 ## Resource Types
 
 | Resource Type | API Version |
 | :-- | :-- |
-| `Microsoft.Network/virtualHubs/hubVirtualNetworkConnections` | 2021-05-01 |
+| `Microsoft.Network/virtualHubs/hubVirtualNetworkConnections` | [2021-05-01](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Network/2021-05-01/virtualHubs/hubVirtualNetworkConnections) |
 
 ## Parameters
 
-| Parameter Name | Type | Default Value | Possible Values | Description |
-| :-- | :-- | :-- | :-- | :-- |
-| `cuaId` | string |  |  | Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered |
-| `enableInternetSecurity` | bool | `True` |  | Optional. Enable internet security. |
-| `name` | string |  |  | Required. The connection name. |
-| `remoteVirtualNetworkId` | string |  |  | Required. Resource ID of the virtual network to link to |
-| `routingConfiguration` | object | `{object}` |  | Optional. Routing Configuration indicating the associated and propagated route tables for this connection. |
-| `virtualHubName` | string |  |  | Required. The virtual hub name. |
+**Required parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `name` | string | The connection name. |
+| `remoteVirtualNetworkId` | string | Resource ID of the virtual network to link to. |
+
+**Conditional parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `virtualHubName` | string | The name of the parent virtual hub. Required if the template is used in a standalone deployment. |
+
+**Optional parameters**
+| Parameter Name | Type | Default Value | Description |
+| :-- | :-- | :-- | :-- |
+| `enableDefaultTelemetry` | bool | `True` | Enable telemetry via the Customer Usage Attribution ID (GUID). |
+| `enableInternetSecurity` | bool | `True` | Enable internet security. |
+| `routingConfiguration` | object | `{object}` | Routing Configuration indicating the associated and propagated route tables for this connection. |
+
 
 ### Parameter Usage: `hubVirtualNetworkConnections`
 
@@ -27,10 +43,6 @@ This module deploys virtual hub virtual network connections.
 
 | Output Name | Type | Description |
 | :-- | :-- | :-- |
-| `name` | string | The name of the virtual hub connection |
-| `resourceGroupName` | string | The resource group the virtual hub connection was deployed into |
-| `resourceId` | string | The resource ID of the virtual hub connection |
-
-## Template references
-
-- [Virtualhubs/Hubvirtualnetworkconnections](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Network/2021-05-01/virtualHubs/hubVirtualNetworkConnections)
+| `name` | string | The name of the virtual hub connection. |
+| `resourceGroupName` | string | The resource group the virtual hub connection was deployed into. |
+| `resourceId` | string | The resource ID of the virtual hub connection. |

@@ -1,10 +1,10 @@
 @description('Required. The name of the Long Term Retention backup policy. For example "default".')
 param name string
 
-@description('Required. The name of the managed instance database')
+@description('Conditional. The name of the parent managed instance database. Required if the template is used in a standalone deployment.')
 param databaseName string
 
-@description('Required. Name of the managed instance.')
+@description('Conditional. The name of the parent managed instance. Required if the template is used in a standalone deployment.')
 param managedInstanceName string
 
 @description('Optional. The week of year to take the yearly backup in an ISO 8601 format.')
@@ -19,12 +19,19 @@ param monthlyRetention string = 'P1Y'
 @description('Optional. The yearly retention policy for an LTR backup in an ISO 8601 format.')
 param yearlyRetention string = 'P5Y'
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource managedInstance 'Microsoft.Sql/managedInstances@2021-05-01-preview' existing = {
@@ -46,11 +53,11 @@ resource backupLongTermRetentionPolicy 'Microsoft.Sql/managedInstances/databases
   }
 }
 
-@description('The name of the deployed database backup long-term retention policy')
+@description('The name of the deployed database backup long-term retention policy.')
 output name string = backupLongTermRetentionPolicy.name
 
-@description('The resource ID of the deployed database backup long-term retention policy')
+@description('The resource ID of the deployed database backup long-term retention policy.')
 output resourceId string = backupLongTermRetentionPolicy.id
 
-@description('The resource group of the deployed database backup long-term retention policy')
+@description('The resource group of the deployed database backup long-term retention policy.')
 output resourceGroupName string = resourceGroup().name

@@ -1,19 +1,19 @@
-@description('Required. The name of the of the API Management service.')
+@description('Conditional. The name of the parent API Management service. Required if the template is used in a standalone deployment.')
 param apiManagementServiceName string = ''
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
 @description('Required. Unique name of NamedValue. It may contain only letters, digits, period, dash, and underscore characters.')
 param displayName string
 
-@description('Optional. KeyVault location details of the namedValue. ')
+@description('Optional. KeyVault location details of the namedValue.')
 param keyVault object = {}
 
 @description('Required. Named value Name.')
 param name string
 
-@description('Optional. Tags that when provided can be used to filter the NamedValue list. - string')
+@description('Optional. Tags that when provided can be used to filter the NamedValue list. - string.')
 param namedValueTags array = []
 
 @description('Optional. Determines whether the value is a secret and should be encrypted or not. Default value is false.')
@@ -24,9 +24,16 @@ param value string = newGuid()
 
 var keyVaultEmpty = empty(keyVault)
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource service 'Microsoft.ApiManagement/service@2021-08-01' existing = {
@@ -45,11 +52,11 @@ resource namedValue 'Microsoft.ApiManagement/service/namedValues@2021-08-01' = {
   }
 }
 
-@description('The resource ID of the named value')
+@description('The resource ID of the named value.')
 output resourceId string = namedValue.id
 
-@description('The name of the named value')
+@description('The name of the named value.')
 output name string = namedValue.name
 
-@description('The resource group the named value was deployed into')
+@description('The resource group the named value was deployed into.')
 output resourceGroupName string = resourceGroup().name

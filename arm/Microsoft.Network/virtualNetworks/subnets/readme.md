@@ -2,34 +2,56 @@
 
 This module deploys a virtual network subnet.
 
+## Navigation
+
+- [Resource Types](#Resource-Types)
+- [Parameters](#Parameters)
+- [Considerations](#Considerations)
+- [Outputs](#Outputs)
+
 ## Resource Types
 
 | Resource Type | API Version |
 | :-- | :-- |
-| `Microsoft.Network/virtualNetworks/subnets` | 2021-03-01 |
+| `Microsoft.Authorization/roleAssignments` | [2020-10-01-preview](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Authorization/2020-10-01-preview/roleAssignments) |
+| `Microsoft.Network/virtualNetworks/subnets` | [2021-05-01](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Network/2021-05-01/virtualNetworks/subnets) |
 
 ## Parameters
 
-| Parameter Name | Type | Default Value | Possible Values | Description |
+**Required parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `addressPrefix` | string | The address prefix for the subnet. |
+
+**Conditional parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `virtualNetworkName` | string | The name of the parent virtual network. Required if the template is used in a standalone deployment. |
+
+**Optional parameters**
+| Parameter Name | Type | Default Value | Allowed Values | Description |
 | :-- | :-- | :-- | :-- | :-- |
-| `addressPrefix` | string |  |  | Required. The address prefix for the subnet. |
-| `addressPrefixes` | array | `[]` |  | Optional. List of address prefixes for the subnet. |
-| `applicationGatewayIpConfigurations` | array | `[]` |  | Optional. Application gateway IP configurations of virtual network resource. |
-| `cuaId` | string |  |  | Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered |
-| `delegations` | array | `[]` |  | Optional. The delegations to enable on the subnet |
-| `ipAllocations` | array | `[]` |  | Optional. Array of IpAllocation which reference this subnet |
-| `name` | string |  |  | Optional. The Name of the subnet resource. |
-| `natGatewayName` | string |  |  | Optional. The name of the NAT Gateway to use for the subnet |
-| `networkSecurityGroupName` | string |  |  | Optional. The network security group to assign to the subnet |
-| `networkSecurityGroupNameResourceGroupName` | string | `[resourceGroup().name]` |  | Optional. Resource Group where NSGs are deployed, if different than VNET Resource Group. |
-| `privateEndpointNetworkPolicies` | string |  | `[Disabled, Enabled, ]` | Optional. enable or disable apply network policies on private end point in the subnet. |
-| `privateLinkServiceNetworkPolicies` | string |  | `[Disabled, Enabled, ]` | Optional. enable or disable apply network policies on private link service in the subnet. |
-| `routeTableName` | string |  |  | Optional. The route table to assign to the subnet |
-| `serviceEndpointPolicies` | array | `[]` |  | Optional. An array of service endpoint policies. |
-| `serviceEndpoints` | array | `[]` |  | Optional. The service endpoints to enable on the subnet |
-| `virtualNetworkName` | string |  |  | Required. The name of the parent virtual network |
+| `addressPrefixes` | array | `[]` |  | List of address prefixes for the subnet. |
+| `applicationGatewayIpConfigurations` | array | `[]` |  | Application gateway IP configurations of virtual network resource. |
+| `delegations` | array | `[]` |  | The delegations to enable on the subnet. |
+| `enableDefaultTelemetry` | bool | `True` |  | Enable telemetry via the Customer Usage Attribution ID (GUID). |
+| `ipAllocations` | array | `[]` |  | Array of IpAllocation which reference this subnet. |
+| `name` | string |  |  | The Name of the subnet resource. |
+| `natGatewayId` | string | `''` |  | The resource ID of the NAT Gateway to use for the subnet. |
+| `networkSecurityGroupId` | string | `''` |  | The resource ID of the network security group to assign to the subnet. |
+| `privateEndpointNetworkPolicies` | string | `''` | `[Disabled, Enabled, ]` | enable or disable apply network policies on private endpoint in the subnet. |
+| `privateLinkServiceNetworkPolicies` | string | `''` | `[Disabled, Enabled, ]` | enable or disable apply network policies on private link service in the subnet. |
+| `roleAssignments` | array | `[]` |  | Array of role assignment objects that contain the 'roleDefinitionIdOrName' and 'principalId' to define RBAC role assignments on this resource. In the roleDefinitionIdOrName attribute, you can provide either the display name of the role definition, or its fully qualified ID in the following format: '/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11'. |
+| `routeTableId` | string | `''` |  | The resource ID of the route table to assign to the subnet. |
+| `serviceEndpointPolicies` | array | `[]` |  | An array of service endpoint policies. |
+| `serviceEndpoints` | array | `[]` |  | The service endpoints to enable on the subnet. |
+
 
 ### Parameter Usage: `delegations`
+
+<details>
+
+<summary>Parameter JSON format</summary>
 
 ```json
 "delegations": [
@@ -42,7 +64,31 @@ This module deploys a virtual network subnet.
 ]
 ```
 
+</details>
+
+<details>
+
+<summary>Bicep format</summary>
+
+```bicep
+delegations: [
+    {
+        name: 'sqlMiDel'
+        properties: {
+            serviceName: 'Microsoft.Sql/managedInstances'
+        }
+    }
+]
+```
+
+</details>
+<p>
+
 ### Parameter Usage: `serviceEndpoints`
+
+<details>
+
+<summary>Parameter JSON format</summary>
 
 ```json
 "serviceEndpoints": [
@@ -53,21 +99,94 @@ This module deploys a virtual network subnet.
 ]
 ```
 
+</details>
+
+
+<details>
+
+<summary>Bicep format</summary>
+
+```bicep
+serviceEndpoints: [
+    'Microsoft.EventHub'
+    'Microsoft.Sql'
+    'Microsoft.Storage'
+    'Microsoft.KeyVault'
+]
+```
+
+</details>
+<p>
+
+### Parameter Usage: `roleAssignments`
+
+Create a role assignment for the given resource. If you want to assign a service principal / managed identity that is created in the same deployment, make sure to also specify the `'principalType'` parameter and set it to `'ServicePrincipal'`. This will ensure the role assignment waits for the principal's propagation in Azure.
+
+<details>
+
+<summary>Parameter JSON format</summary>
+
+```json
+"roleAssignments": {
+    "value": [
+        {
+            "roleDefinitionIdOrName": "Reader",
+            "description": "Reader Role Assignment",
+            "principalIds": [
+                "12345678-1234-1234-1234-123456789012", // object 1
+                "78945612-1234-1234-1234-123456789012" // object 2
+            ]
+        },
+        {
+            "roleDefinitionIdOrName": "/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11",
+            "principalIds": [
+                "12345678-1234-1234-1234-123456789012" // object 1
+            ],
+            "principalType": "ServicePrincipal"
+        }
+    ]
+}
+```
+
+</details>
+
+<details>
+
+<summary>Bicep format</summary>
+
+```bicep
+roleAssignments: [
+    {
+        roleDefinitionIdOrName: 'Reader'
+        description: 'Reader Role Assignment'
+        principalIds: [
+            '12345678-1234-1234-1234-123456789012' // object 1
+            '78945612-1234-1234-1234-123456789012' // object 2
+        ]
+    }
+    {
+        roleDefinitionIdOrName: '/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11'
+        principalIds: [
+            '12345678-1234-1234-1234-123456789012' // object 1
+        ]
+        principalType: 'ServicePrincipal'
+    }
+]
+```
+
+</details>
+<p>
+
 ## Considerations
 
 The `privateEndpointNetworkPolicies` property must be set to disabled for subnets that contain private endpoints. It confirms that NSGs rules will not apply to private endpoints (currently not supported, [reference](https://docs.microsoft.com/en-us/azure/private-link/private-endpoint-overview#limitations)). Default Value when not specified is "Enabled".
-
 
 ## Outputs
 
 | Output Name | Type | Description |
 | :-- | :-- | :-- |
-| `name` | string | The name of the virtual network peering |
-| `resourceGroupName` | string | The resource group the virtual network peering was deployed into |
-| `resourceId` | string | The resource ID of the virtual network peering |
-| `subnetAddressPrefix` | string | The address prefix for the subnet |
-| `subnetAddressPrefixes` | array | List of address prefixes for the subnet |
-
-## Template references
-
-- [Virtualnetworks/Subnets](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Network/2021-03-01/virtualNetworks/subnets)
+| `name` | string | The name of the virtual network peering. |
+| `resourceGroupName` | string | The resource group the virtual network peering was deployed into. |
+| `resourceId` | string | The resource ID of the virtual network peering. |
+| `subnetAddressPrefix` | string | The address prefix for the subnet. |
+| `subnetAddressPrefixes` | array | List of address prefixes for the subnet. |

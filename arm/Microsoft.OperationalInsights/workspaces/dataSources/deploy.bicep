@@ -1,7 +1,7 @@
-@description('Required. Name of the Log Analytics workspace')
+@description('Conditional. The name of the parent Log Analytics workspace. Required if the template is used in a standalone deployment.')
 param logAnalyticsWorkspaceName string
 
-@description('Required. Name of the solution')
+@description('Required. Name of the solution.')
 param name string
 
 @description('Required. The kind of the DataSource.')
@@ -53,12 +53,19 @@ param syslogName string = ''
 @description('Optional. Severities to configure when kind is LinuxSyslog.')
 param syslogSeverities array = []
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' existing = {
@@ -85,11 +92,11 @@ resource dataSource 'Microsoft.OperationalInsights/workspaces/dataSources@2020-0
   }
 }
 
-@description('The resource ID of the deployed data source')
+@description('The resource ID of the deployed data source.')
 output resourceId string = dataSource.id
 
-@description('The resource group where the data source is deployed')
+@description('The resource group where the data source is deployed.')
 output resourceGroupName string = resourceGroup().name
 
-@description('The name of the deployed data source')
+@description('The name of the deployed data source.')
 output name string = dataSource.name

@@ -1,10 +1,10 @@
-@description('Required. The name of the parent load balancer')
+@description('Conditional. The name of the parent load balancer. Required if the template is used in a standalone deployment.')
 param loadBalancerName string
 
-@description('Required. The name of the inbound NAT rule')
+@description('Required. The name of the inbound NAT rule.')
 param name string
 
-@description('Required. The port for the external endpoint. Port numbers for each rule must be unique within the Load Balancer. ')
+@description('Required. The port for the external endpoint. Port numbers for each rule must be unique within the Load Balancer.')
 @minValue(1)
 @maxValue(65534)
 param frontendPort int
@@ -14,7 +14,7 @@ param frontendPort int
 @maxValue(65535)
 param backendPort int = frontendPort
 
-@description('Optional. Name of the backend address pool')
+@description('Optional. Name of the backend address pool.')
 param backendAddressPoolName string = ''
 
 @description('Optional. Configures a virtual machine\'s endpoint for the floating IP capability required to configure a SQL AlwaysOn Availability Group. This setting is required when using the SQL AlwaysOn Availability Groups in SQL server. This setting can\'t be changed after you create the endpoint.')
@@ -23,7 +23,7 @@ param enableFloatingIP bool = false
 @description('Optional. Receive bidirectional TCP Reset on TCP flow idle timeout or unexpected connection termination. This element is only used when the protocol is set to TCP.')
 param enableTcpReset bool = false
 
-@description('Required. The name of the frontend IP address to set for the inbound NAT rule')
+@description('Required. The name of the frontend IP address to set for the inbound NAT rule.')
 param frontendIPConfigurationName string
 
 @description('Optional. The port range end for the external endpoint. This property is used together with BackendAddressPool and FrontendPortRangeStart. Individual inbound NAT rule port mappings will be created for each backend address from BackendAddressPool.')
@@ -47,12 +47,19 @@ param idleTimeoutInMinutes int = 4
 ])
 param protocol string = 'Tcp'
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource loadBalancer 'Microsoft.Network/loadBalancers@2021-05-01' existing = {
@@ -80,11 +87,11 @@ resource inboundNatRule 'Microsoft.Network/loadBalancers/inboundNatRules@2021-05
   parent: loadBalancer
 }
 
-@description('The name of the inbound NAT rule')
+@description('The name of the inbound NAT rule.')
 output name string = inboundNatRule.name
 
-@description('The resource ID of the inbound NAT rule')
+@description('The resource ID of the inbound NAT rule.')
 output resourceId string = inboundNatRule.id
 
-@description('The resource group the inbound NAT rule was deployed into')
+@description('The resource group the inbound NAT rule was deployed into.')
 output resourceGroupName string = resourceGroup().name

@@ -1,7 +1,7 @@
 @description('Required. The route table name.')
 param name string
 
-@description('Required. The virtual hub name.')
+@description('Conditional. The name of the parent virtual hub. Required if the template is used in a standalone deployment.')
 param virtualHubName string
 
 @description('Optional. List of labels associated with this route table.')
@@ -10,12 +10,19 @@ param labels array = []
 @description('Optional. List of all routes.')
 param routes array = []
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource virtualHub 'Microsoft.Network/virtualHubs@2021-05-01' existing = {
@@ -31,11 +38,11 @@ resource hubRouteTable 'Microsoft.Network/virtualHubs/hubRouteTables@2021-05-01'
   }
 }
 
-@description('The name of the deployed virtual hub route table')
+@description('The name of the deployed virtual hub route table.')
 output name string = hubRouteTable.name
 
-@description('The resource ID of the deployed virtual hub route table')
+@description('The resource ID of the deployed virtual hub route table.')
 output resourceId string = hubRouteTable.id
 
-@description('The resource group the virtual hub route table was deployed into')
+@description('The resource group the virtual hub route table was deployed into.')
 output resourceGroupName string = resourceGroup().name

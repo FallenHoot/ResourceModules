@@ -1,7 +1,7 @@
-@description('Required. Name of the Log Analytics workspace')
+@description('Conditional. The name of the parent Log Analytics workspace. Required if the template is used in a standalone deployment.')
 param logAnalyticsWorkspaceName string
 
-@description('Required. Name of the saved search')
+@description('Required. Name of the saved search.')
 param name string
 
 @description('Required. Display name for the search.')
@@ -16,7 +16,7 @@ param query string
 @description('Optional. Tags to configure in the resource.')
 param tags array = []
 
-@description('Optional. The function alias if query serves as a function..')
+@description('Optional. The function alias if query serves as a function.')
 param functionAlias string = ''
 
 @description('Optional. The optional function parameters if query serves as a function. Value should be in the following format: "param-name1:type1 = default_value1, param-name2:type2 = default_value2". For more examples and proper syntax please refer to /azure/kusto/query/functions/user-defined-functions.')
@@ -25,12 +25,22 @@ param functionParameters string = ''
 @description('Optional. The version number of the query language.')
 param version int = 2
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. The ETag of the saved search. To override an existing saved search, use "*" or specify the current Etag.')
+param etag string = '*'
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
+
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' existing = {
@@ -40,7 +50,9 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' existin
 resource savedSearch 'Microsoft.OperationalInsights/workspaces/savedSearches@2020-08-01' = {
   name: name
   parent: workspace
+  //etag: etag // According to API, the variable should be here, but it doesn't work here.
   properties: {
+    etag: etag
     tags: tags
     displayName: displayName
     category: category
@@ -51,11 +63,11 @@ resource savedSearch 'Microsoft.OperationalInsights/workspaces/savedSearches@202
   }
 }
 
-@description('The resource ID of the deployed saved search')
+@description('The resource ID of the deployed saved search.')
 output resourceId string = savedSearch.id
 
-@description('The resource group where the saved search is deployed')
+@description('The resource group where the saved search is deployed.')
 output resourceGroupName string = resourceGroup().name
 
-@description('The name of the deployed saved search')
+@description('The name of the deployed saved search.')
 output name string = savedSearch.name

@@ -5,11 +5,20 @@
         "name": {
             "value": "<<namePrefix>>-az-bas-x-001"
         },
+        "lock": {
+            "value": "CanNotDelete"
+        },
         "vNetId": {
             "value": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/virtualNetworks/adp-<<namePrefix>>-az-vnet-x-001"
         },
-        "publicIPAddressId": {
+        "azureBastionSubnetPublicIpId": {
             "value": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/publicIPAddresses/adp-<<namePrefix>>-az-pip-x-bas"
+        },
+        "skuType": {
+            "value": "Standard"
+        },
+        "scaleUnits": {
+            "value": 4
         },
         "roleAssignments": {
             "value": [

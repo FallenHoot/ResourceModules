@@ -2,45 +2,42 @@
 
 This module deploys Network Firewall Policies Rule Collection Groups.
 
+## Navigation
+
+- [Resource Types](#Resource-Types)
+- [Parameters](#Parameters)
+- [Outputs](#Outputs)
+
 ## Resource Types
 
 | Resource Type | API Version |
 | :-- | :-- |
-| `Microsoft.Network/firewallPolicies/ruleCollectionGroups` | 2021-03-01 |
+| `Microsoft.Network/firewallPolicies/ruleCollectionGroups` | [2021-05-01](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Network/2021-05-01/firewallPolicies/ruleCollectionGroups) |
 
 ## Parameters
 
-| Parameter Name | Type | Default Value | Possible Values | Description |
-| :-- | :-- | :-- | :-- | :-- |
-| `cuaId` | string |  |  | Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered |
-| `firewallPolicyName` | string |  |  | Required. Name of the Firewall Policy. |
-| `name` | string |  |  | Required. The name of the rule collection group to deploy |
-| `priority` | int |  |  | Required. Priority of the Firewall Policy Rule Collection Group resource. |
-| `ruleCollections` | array | `[]` |  | Optional. Group of Firewall Policy rule collections. |
+**Required parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `name` | string | The name of the rule collection group to deploy. |
+| `priority` | int | Priority of the Firewall Policy Rule Collection Group resource. |
 
-### Parameter Usage: `ruleCollections`
+**Conditional parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `firewallPolicyName` | string | The name of the parent Firewall Policy. Required if the template is used in a standalone deployment. |
 
-For remaining properties, see [FirewallPolicyRuleCollection objects](https://docs.microsoft.com/en-us/azure/templates/microsoft.network/firewallpolicies/rulecollectiongroups?tabs=json#firewallpolicyrulecollection-objects)
+**Optional parameters**
+| Parameter Name | Type | Default Value | Description |
+| :-- | :-- | :-- | :-- |
+| `enableDefaultTelemetry` | bool | `True` | Enable telemetry via the Customer Usage Attribution ID (GUID). |
+| `ruleCollections` | array | `[]` | Group of Firewall Policy rule collections. |
 
-```json
-"ruleCollections": [
-    {
-    "name": "string",
-    "priority": "int",
-    "ruleCollectionType": "string"
-    // For remaining properties, see FirewallPolicyRuleCollection objects
-    }
-]
-```
 
 ## Outputs
 
 | Output Name | Type | Description |
 | :-- | :-- | :-- |
-| `name` | string | The name of the deployed rule collection group |
-| `resourceGroupName` | string | The resource group of the deployed rule collection group |
-| `resourceId` | string | The resource ID of the deployed rule collection group |
-
-## Template references
-
-- [Firewallpolicies/Rulecollectiongroups](https://docs.microsoft.com/en-us/azure/templates/Microsoft.Network/2021-03-01/firewallPolicies/ruleCollectionGroups)
+| `name` | string | The name of the deployed rule collection group. |
+| `resourceGroupName` | string | The resource group of the deployed rule collection group. |
+| `resourceId` | string | The resource ID of the deployed rule collection group. |

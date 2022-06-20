@@ -24,18 +24,25 @@ param state string = 'Disabled'
 @secure()
 param storageAccountAccessKey string = ''
 
-@description('Optional. Specifies the blob storage endpoint (e.g. https://mystorageaccount.blob.core.windows.net). This blob storage will hold all Threat Detection audit logs.')
+@description('Optional. Specifies the blob storage endpoint. This blob storage will hold all Threat Detection audit logs.')
 param storageEndpoint string = ''
 
-@description('Required. The Name of SQL Server')
+@description('Conditional. The name of the parent SQL Server. Required if the template is used in a standalone deployment.')
 param serverName string
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource server 'Microsoft.Sql/servers@2021-05-01-preview' existing = {
@@ -56,11 +63,11 @@ resource securityAlertPolicy 'Microsoft.Sql/servers/securityAlertPolicies@2021-0
   }
 }
 
-@description('The name of the deployed security alert policy')
+@description('The name of the deployed security alert policy.')
 output name string = securityAlertPolicy.name
 
-@description('The resource ID of the deployed security alert policy')
+@description('The resource ID of the deployed security alert policy.')
 output resourceId string = securityAlertPolicy.id
 
-@description('The resourceGroup of the deployed security alert policy')
+@description('The resource group of the deployed security alert policy.')
 output resourceGroupName string = resourceGroup().name

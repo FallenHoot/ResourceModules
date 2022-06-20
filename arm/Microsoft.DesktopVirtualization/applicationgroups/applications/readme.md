@@ -2,36 +2,48 @@
 
 This module deploys AVD Applications.
 
+## Navigation
+
+- [Resource types](#Resource-types)
+- [Parameters](#Parameters)
+- [Outputs](#Outputs)
+
 ## Resource types
 
 | Resource Type | API Version |
 | :-- | :-- |
-| `Microsoft.DesktopVirtualization/applicationGroups/applications` | 2021-07-12 |
+| `Microsoft.DesktopVirtualization/applicationGroups/applications` | [2021-07-12](https://docs.microsoft.com/en-us/azure/templates/Microsoft.DesktopVirtualization/2021-07-12/applicationGroups/applications) |
 
 ## Parameters
 
-| Parameter Name | Type | Default Value | Possible Values | Description |
+**Required parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `filePath` | string | Specifies a path for the executable file for the application. |
+| `friendlyName` | string | Friendly name of Application.. |
+| `name` | string | Name of the Application to be created in the Application Group. |
+
+**Conditional parameters**
+| Parameter Name | Type | Description |
+| :-- | :-- | :-- |
+| `appGroupName` | string | The name of the parent Application Group to create the application(s) in. Required if the template is used in a standalone deployment. |
+
+**Optional parameters**
+| Parameter Name | Type | Default Value | Allowed Values | Description |
 | :-- | :-- | :-- | :-- | :-- |
-| `appGroupName` | string |  |  | Required. Name of the Application Group to create the application(s) in. |
-| `commandLineArguments` | string |  |  | Optional. Command-Line Arguments for Application. |
-| `commandLineSetting` | string | `DoNotAllow` | `[Allow, DoNotAllow, Require]` | Optional. Specifies whether this published application can be launched with command-line arguments provided by the client, command-line arguments specified at publish time, or no command-line arguments at all. |
-| `cuaId` | string |  |  | Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered |
-| `description` | string |  |  | Optional. Description of Application.. |
-| `filePath` | string |  |  | Required. Specifies a path for the executable file for the application. |
-| `friendlyName` | string |  |  | Required. Friendly name of Application.. |
-| `iconIndex` | int |  |  | Optional. Index of the icon. |
-| `iconPath` | string |  |  | Optional. Path to icon. |
-| `name` | string |  |  | Required. Name of the Application to be created in the Application Group. |
-| `showInPortal` | bool |  |  | Optional. Specifies whether to show the RemoteApp program in the RD Web Access server. |
+| `commandLineArguments` | string | `''` |  | Command-Line Arguments for Application. |
+| `commandLineSetting` | string | `'DoNotAllow'` | `[Allow, DoNotAllow, Require]` | Specifies whether this published application can be launched with command-line arguments provided by the client, command-line arguments specified at publish time, or no command-line arguments at all. |
+| `description` | string | `''` |  | Description of Application.. |
+| `enableDefaultTelemetry` | bool | `True` |  | Enable telemetry via the Customer Usage Attribution ID (GUID). |
+| `iconIndex` | int | `0` |  | Index of the icon. |
+| `iconPath` | string | `''` |  | Path to icon. |
+| `showInPortal` | bool | `False` |  | Specifies whether to show the RemoteApp program in the RD Web Access server. |
+
 
 ## Outputs
 
 | Output Name | Type | Description |
 | :-- | :-- | :-- |
-| `applicationResourceIds` | string | The resource ID of the deployed Application. |
 | `name` | string | The Name of the Application Group to register the Application in. |
 | `resourceGroupName` | string | The name of the Resource Group the AVD Application was created in. |
-
-## Template references
-
-- [Applicationgroups/Applications](https://docs.microsoft.com/en-us/azure/templates/Microsoft.DesktopVirtualization/2021-07-12/applicationGroups/applications)
+| `resourceId` | string | The resource ID of the deployed Application. |

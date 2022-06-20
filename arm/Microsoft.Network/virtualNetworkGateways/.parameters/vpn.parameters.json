@@ -5,6 +5,9 @@
         "name": {
             "value": "<<namePrefix>>-az-gw-vpn-001"
         },
+        "lock": {
+            "value": "CanNotDelete"
+        },
         "domainNameLabel": {
             "value": [
                 "<<namePrefix>>-az-gw-vpn-dm-001"
@@ -25,7 +28,7 @@
             "value": "RouteBased"
         },
         "activeActive": {
-            "value": false
+            "value": true
         },
         "vNetResourceId": {
             "value": "/subscriptions/<<subscriptionId>>/resourceGroups/validation-rg/providers/Microsoft.Network/virtualNetworks/adp-<<namePrefix>>-az-vnet-x-001"

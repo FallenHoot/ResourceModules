@@ -1,24 +1,31 @@
 @description('Required. The connection name.')
 param name string
 
-@description('Required. The virtual hub name.')
+@description('Conditional. The name of the parent virtual hub. Required if the template is used in a standalone deployment.')
 param virtualHubName string
 
 @description('Optional. Enable internet security.')
 param enableInternetSecurity bool = true
 
-@description('Required. Resource ID of the virtual network to link to')
+@description('Required. Resource ID of the virtual network to link to.')
 param remoteVirtualNetworkId string
 
 @description('Optional. Routing Configuration indicating the associated and propagated route tables for this connection.')
 param routingConfiguration object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource virtualHub 'Microsoft.Network/virtualHubs@2021-05-01' existing = {
@@ -37,11 +44,11 @@ resource hubVirtualNetworkConnection 'Microsoft.Network/virtualHubs/hubVirtualNe
   }
 }
 
-@description('The resource group the virtual hub connection was deployed into')
+@description('The resource group the virtual hub connection was deployed into.')
 output resourceGroupName string = resourceGroup().name
 
-@description('The resource ID of the virtual hub connection')
+@description('The resource ID of the virtual hub connection.')
 output resourceId string = hubVirtualNetworkConnection.id
 
-@description('The name of the virtual hub connection')
+@description('The name of the virtual hub connection.')
 output name string = hubVirtualNetworkConnection.name

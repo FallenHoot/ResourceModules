@@ -36,6 +36,16 @@ param licenseType string = 'LicenseIncluded'
 @description('Optional. If the service has different generations of hardware, for the same SKU, then that can be captured here.')
 param hardwareFamily string = 'Gen5'
 
+@description('Optional. Whether or not multi-az is enabled.')
+param zoneRedundant bool = false
+
+@description('Optional. Service principal type. If using AD Authentication and applying Admin, must be set to `SystemAssigned`. Then Global Admin must allow Reader access to Azure AD for the Service Principal.')
+@allowed([
+  'None'
+  'SystemAssigned'
+])
+param servicePrincipal string = 'None'
+
 @description('Optional. Specifies the mode of database creation. Default: Regular instance creation. Restore: Creates an instance by restoring a set of backups to specific point in time. RestorePointInTime and SourceManagedInstanceId must be specified.')
 @allowed([
   'Default'
@@ -90,21 +100,21 @@ param diagnosticEventHubAuthorizationRuleId string = ''
 param diagnosticEventHubName string = ''
 
 @allowed([
+  ''
   'CanNotDelete'
-  'NotSpecified'
   'ReadOnly'
 ])
 @description('Optional. Specify the type of lock.')
-param lock string = 'NotSpecified'
+param lock string = ''
 
-@description('Optional. Array of role assignment objects that contain the \'roleDefinitionIdOrName\' and \'principalId\' to define RBAC role assignments on this resource. In the roleDefinitionIdOrName attribute, you can provide either the display name of the role definition, or its fully qualified ID in the following format: \'/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11\'')
+@description('Optional. Array of role assignment objects that contain the \'roleDefinitionIdOrName\' and \'principalId\' to define RBAC role assignments on this resource. In the roleDefinitionIdOrName attribute, you can provide either the display name of the role definition, or its fully qualified ID in the following format: \'/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11\'.')
 param roleAssignments array = []
 
 @description('Optional. Tags of the resource.')
 param tags object = {}
 
-@description('Optional. Customer Usage Attribution ID (GUID). This GUID must be previously registered')
-param cuaId string = ''
+@description('Optional. Enable telemetry via the Customer Usage Attribution ID (GUID).')
+param enableDefaultTelemetry bool = true
 
 @description('Optional. Enables system assigned managed identity on the resource.')
 param systemAssignedIdentity bool = false
@@ -112,33 +122,42 @@ param systemAssignedIdentity bool = false
 @description('Optional. The ID(s) to assign to the resource.')
 param userAssignedIdentities object = {}
 
-@description('Optional. Mandatory if "managedServiceIdentity" contains UserAssigned. The resource ID of a user assigned identity to be used by default.')
+@description('Conditional. The resource ID of a user assigned identity to be used by default. Required if "userAssignedIdentities" is not empty.')
 param primaryUserAssignedIdentityId string = ''
 
 @description('Optional. Databases to create in this server.')
 param databases array = []
 
-@description('Optional. The vulnerability assessment configuration')
+@description('Optional. The vulnerability assessment configuration.')
 param vulnerabilityAssessmentsObj object = {}
 
-@description('Optional. The security alert policy configuration')
+@description('Optional. The security alert policy configuration.')
 param securityAlertPoliciesObj object = {}
 
-@description('Optional. The keys to configure')
+@description('Optional. The keys to configure.')
 param keys array = []
 
-@description('Optional. The encryption protection configuration')
+@description('Optional. The encryption protection configuration.')
 param encryptionProtectorObj object = {}
 
-@description('Optional. The administrator configuration')
+@description('Optional. The administrator configuration.')
 param administratorsObj object = {}
+
+@description('Optional. The storage account type used to store backups for this database.')
+@allowed([
+  'Geo'
+  'GeoZone'
+  'Local'
+  'Zone'
+])
+param requestedBackupStorageRedundancy string = 'Geo'
 
 @description('Optional. The name of logs that will be streamed.')
 @allowed([
   'ResourceUsageStats'
   'SQLSecurityAuditEvents'
 ])
-param logsToEnable array = [
+param diagnosticLogCategoriesToEnable array = [
   'ResourceUsageStats'
   'SQLSecurityAuditEvents'
 ]
@@ -147,12 +166,15 @@ param logsToEnable array = [
 @allowed([
   'AllMetrics'
 ])
-param metricsToEnable array = [
+param diagnosticMetricsToEnable array = [
   'AllMetrics'
 ]
 
-var diagnosticsLogs = [for log in logsToEnable: {
-  category: log
+@description('Optional. The name of the diagnostic setting, if deployed.')
+param diagnosticSettingsName string = '${name}-diagnosticSettings'
+
+var diagnosticsLogs = [for category in diagnosticLogCategoriesToEnable: {
+  category: category
   enabled: true
   retentionPolicy: {
     enabled: true
@@ -160,7 +182,7 @@ var diagnosticsLogs = [for log in logsToEnable: {
   }
 }]
 
-var diagnosticsMetrics = [for metric in metricsToEnable: {
+var diagnosticsMetrics = [for metric in diagnosticMetricsToEnable: {
   category: metric
   timeGrain: null
   enabled: true
@@ -177,9 +199,18 @@ var identity = identityType != 'None' ? {
   userAssignedIdentities: !empty(userAssignedIdentities) ? userAssignedIdentities : null
 } : null
 
-module pid_cuaId '.bicep/nested_cuaId.bicep' = if (!empty(cuaId)) {
-  name: 'pid-${cuaId}'
-  params: {}
+var enableReferencedModulesTelemetry = false
+
+resource defaultTelemetry 'Microsoft.Resources/deployments@2021-04-01' = if (enableDefaultTelemetry) {
+  name: 'pid-47ed15a6-730a-4827-bcb4-0fd963ffbd82-${uniqueString(deployment().name, location)}'
+  properties: {
+    mode: 'Incremental'
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+      resources: []
+    }
+  }
 }
 
 resource managedInstance 'Microsoft.Sql/managedInstances@2021-05-01-preview' = {
@@ -189,6 +220,7 @@ resource managedInstance 'Microsoft.Sql/managedInstances@2021-05-01-preview' = {
   sku: {
     name: skuName
     tier: skuTier
+    family: hardwareFamily
   }
   tags: tags
   properties: {
@@ -197,7 +229,6 @@ resource managedInstance 'Microsoft.Sql/managedInstances@2021-05-01-preview' = {
     administratorLoginPassword: administratorLoginPassword
     subnetId: subnetId
     licenseType: licenseType
-    hardwareFamily: hardwareFamily
     vCores: vCores
     storageSizeInGB: storageSizeInGB
     collation: collation
@@ -209,20 +240,25 @@ resource managedInstance 'Microsoft.Sql/managedInstances@2021-05-01-preview' = {
     timezoneId: timezoneId
     instancePoolId: instancePoolResourceId
     primaryUserAssignedIdentityId: primaryUserAssignedIdentityId
+    requestedBackupStorageRedundancy: requestedBackupStorageRedundancy
+    zoneRedundant: zoneRedundant
+    servicePrincipal: {
+      type: servicePrincipal
+    }
   }
 }
 
-resource managedInstance_lock 'Microsoft.Authorization/locks@2017-04-01' = if (lock != 'NotSpecified') {
+resource managedInstance_lock 'Microsoft.Authorization/locks@2017-04-01' = if (!empty(lock)) {
   name: '${managedInstance.name}-${lock}-lock'
   properties: {
-    level: lock
-    notes: (lock == 'CanNotDelete') ? 'Cannot delete resource or child resources.' : 'Cannot modify the resource or child resources.'
+    level: any(lock)
+    notes: lock == 'CanNotDelete' ? 'Cannot delete resource or child resources.' : 'Cannot modify the resource or child resources.'
   }
   scope: managedInstance
 }
 
 resource managedInstance_diagnosticSettings 'Microsoft.Insights/diagnosticsettings@2021-05-01-preview' = if ((!empty(diagnosticStorageAccountId)) || (!empty(diagnosticWorkspaceId)) || (!empty(diagnosticEventHubAuthorizationRuleId)) || (!empty(diagnosticEventHubName))) {
-  name: '${managedInstance.name}-diagnosticSettings'
+  name: diagnosticSettingsName
   properties: {
     storageAccountId: !empty(diagnosticStorageAccountId) ? diagnosticStorageAccountId : null
     workspaceId: !empty(diagnosticWorkspaceId) ? diagnosticWorkspaceId : null
@@ -234,10 +270,12 @@ resource managedInstance_diagnosticSettings 'Microsoft.Insights/diagnosticsettin
   scope: managedInstance
 }
 
-module managedInstance_rbac '.bicep/nested_rbac.bicep' = [for (roleAssignment, index) in roleAssignments: {
+module managedInstance_rbac '.bicep/nested_roleAssignments.bicep' = [for (roleAssignment, index) in roleAssignments: {
   name: '${uniqueString(deployment().name, location)}-SqlMi-Rbac-${index}'
   params: {
+    description: contains(roleAssignment, 'description') ? roleAssignment.description : ''
     principalIds: roleAssignment.principalIds
+    principalType: contains(roleAssignment, 'principalType') ? roleAssignment.principalType : ''
     roleDefinitionIdOrName: roleAssignment.roleDefinitionIdOrName
     resourceId: managedInstance.id
   }
@@ -256,7 +294,7 @@ module managedInstance_databases 'databases/deploy.bicep' = [for (database, inde
     diagnosticEventHubAuthorizationRuleId: contains(database, 'diagnosticEventHubAuthorizationRuleId') ? database.diagnosticEventHubAuthorizationRuleId : ''
     diagnosticEventHubName: contains(database, 'diagnosticEventHubName') ? database.diagnosticEventHubName : ''
     location: contains(database, 'location') ? database.location : managedInstance.location
-    lock: contains(database, 'lock') ? database.lock : lock
+    lock: contains(database, 'lock') ? database.lock : ''
     longTermRetentionBackupResourceId: contains(database, 'longTermRetentionBackupResourceId') ? database.longTermRetentionBackupResourceId : ''
     recoverableDatabaseId: contains(database, 'recoverableDatabaseId') ? database.recoverableDatabaseId : ''
     restorableDroppedDatabaseId: contains(database, 'restorableDroppedDatabaseId') ? database.restorableDroppedDatabaseId : ''
@@ -268,6 +306,7 @@ module managedInstance_databases 'databases/deploy.bicep' = [for (database, inde
     diagnosticWorkspaceId: contains(database, 'diagnosticWorkspaceId') ? database.diagnosticWorkspaceId : ''
     backupShortTermRetentionPoliciesObj: contains(database, 'backupShortTermRetentionPolicies') ? database.backupShortTermRetentionPolicies : {}
     backupLongTermRetentionPoliciesObj: contains(database, 'backupLongTermRetentionPolicies') ? database.backupLongTermRetentionPolicies : {}
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }]
 
@@ -278,6 +317,7 @@ module managedInstance_securityAlertPolicy 'securityAlertPolicies/deploy.bicep' 
     name: securityAlertPoliciesObj.name
     emailAccountAdmins: contains(securityAlertPoliciesObj, 'emailAccountAdmins') ? securityAlertPoliciesObj.emailAccountAdmins : false
     state: contains(securityAlertPoliciesObj, 'state') ? securityAlertPoliciesObj.state : 'Disabled'
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }
 
@@ -290,6 +330,7 @@ module managedInstance_vulnerabilityAssessment 'vulnerabilityAssessments/deploy.
     recurringScansEmailSubscriptionAdmins: contains(vulnerabilityAssessmentsObj, 'recurringScansEmailSubscriptionAdmins') ? vulnerabilityAssessmentsObj.recurringScansEmailSubscriptionAdmins : false
     recurringScansIsEnabled: contains(vulnerabilityAssessmentsObj, 'recurringScansIsEnabled') ? vulnerabilityAssessmentsObj.recurringScansIsEnabled : false
     vulnerabilityAssessmentsStorageAccountId: contains(vulnerabilityAssessmentsObj, 'vulnerabilityAssessmentsStorageAccountId') ? vulnerabilityAssessmentsObj.vulnerabilityAssessmentsStorageAccountId : ''
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
   dependsOn: [
     managedInstance_securityAlertPolicy
@@ -303,6 +344,7 @@ module managedInstance_key 'keys/deploy.bicep' = [for (key, index) in keys: {
     name: contains(key, 'name') ? key.name : ''
     serverKeyType: contains(key, 'serverKeyType') ? key.serverKeyType : 'ServiceManaged'
     uri: contains(key, 'uri') ? key.uri : ''
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }]
 
@@ -314,6 +356,7 @@ module managedInstance_encryptionProtector 'encryptionProtector/deploy.bicep' = 
     name: contains(encryptionProtectorObj, 'name') ? encryptionProtectorObj.serverKeyType : 'current'
     serverKeyType: contains(encryptionProtectorObj, 'serverKeyType') ? encryptionProtectorObj.serverKeyType : 'ServiceManaged'
     autoRotationEnabled: contains(encryptionProtectorObj, 'autoRotationEnabled') ? encryptionProtectorObj.autoRotationEnabled : true
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }
 
@@ -322,19 +365,23 @@ module managedInstance_administrator 'administrators/deploy.bicep' = if (!empty(
   params: {
     managedInstanceName: managedInstance.name
     login: administratorsObj.name
-    sid: administratorsObj.name
+    sid: administratorsObj.sid
     tenantId: contains(administratorsObj, 'tenantId') ? administratorsObj.tenantId : ''
+    enableDefaultTelemetry: enableReferencedModulesTelemetry
   }
 }
 
-@description('The name of the deployed managed instance')
+@description('The name of the deployed managed instance.')
 output name string = managedInstance.name
 
-@description('The resource ID of the deployed managed instance')
+@description('The resource ID of the deployed managed instance.')
 output resourceId string = managedInstance.id
 
-@description('The resource group of the deployed managed instance')
+@description('The resource group of the deployed managed instance.')
 output resourceGroupName string = resourceGroup().name
 
 @description('The principal ID of the system assigned identity.')
 output systemAssignedPrincipalId string = systemAssignedIdentity && contains(managedInstance.identity, 'principalId') ? managedInstance.identity.principalId : ''
+
+@description('The location the resource was deployed into.')
+output location string = managedInstance.location
